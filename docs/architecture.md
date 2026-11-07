@@ -277,9 +277,66 @@ scrolls inside its own box on phones), `Changes`, `ChangeNew` (template form gen
 JSON schema, or raw commands; dry-run preview) and `ChangeDetail` (commands, approval, agent
 log, timeline). Config text is always rendered as text, never HTML.
 
+## Added in Phase 7: AI
+```
+ agent (every 6 h, or --ai-only)                         backend (light: stores and serves)
+  GET /api/agent/ai/training-data ◄──────────────────── subnet_usage (1 point/subnet/day,
+     │ subnet history, 7 d uplink metrics, endpoint MACs     written on every report),
+     │                                                     metrics, mac_entries, devices
+  forecast.py  Prophet / straight line ── POST /predictions ──► predictions (+ dashboard card)
+  anomaly.py   IsolationForest ────────── POST /anomalies ───► traffic_anomaly alerts
+  classify.py  OUI + SNMP + names (+ports)─ POST /classifications ► mac_addresses.classification
+
+ browser ── POST /api/ai/ask ──► rules.py ──(no match)──► LLM (question + schema only)
+                                     └──── proposal ────┘
+                                               ▼
+                                   query_guard.validate()  ── refused → 422 + the refused query
+                                               ▼
+                                   aggregate on the read-only client (AI_MONGODB_URI),
+                                   $project allowlist first, $limit 100, maxTimeMS 3000
+ browser ── POST /api/ai/explain ─► facts built by the server, secret lines dropped,
+                                    fenced as untrusted ─► LLM or built-in template (cached)
+```
+
+**Why the heavy part is on the agent.** Prophet with its Stan backend and scikit-learn need a
+few hundred MB and seconds of CPU per model; Render's free web service has 512 MB and no
+scheduler. The agent already runs on a schedule inside the network, so it trains there and
+uploads only small results. The backend never imports pandas, numpy, Prophet or scikit-learn.
+
+**Agent** (`netmap_agent/ai_training/`):
+| File | What it does |
+|---|---|
+| `forecast.py` | Subnet exhaustion from daily "used" counts: Prophet (weekly pattern, no yearly) with ≥14 days, linear regression with 3–13 days. Returns the day it reaches 80 % and 100 %, growth per day, and a 90-day series with an 80 % likely range. Uplinks: hourly mean of max(in, out), 7-day forecast, first hour above 80 % of port speed. Each fit has a 60 s cap and falls back to the straight line on any error. |
+| `anomaly.py` | IsolationForest per interface on log(in), log(out), error rate and hour of day (sin/cos). Needs ≥288 points (a day). Fitted on all points with `max_samples=1.0`: with sub-sampling, a single outlier is missing from most trees and isn't isolated. A flag also needs a real difference (≥3× and ≥1 Mbit/s, or ≥1 error/s), so the model's "1 % contamination" can't raise alerts on a quiet network. The explanation compares the value with the median and 5–95 % range for the same hour. |
+| `classify.py` | Weighted rules, each with a reason: MAC vendor (OUI), managed-device SNMP data, subnet/port names ("Printers", "Cameras"), Wi-Fi ports, randomised MACs, and (opt-in) open ports. Highest score wins if ≥1.5, else "unknown". Explainable, needs no training data. |
+| `oui.py` | Built-in prefixes for common vendors; optional IEEE MA-L download over HTTPS (20 MB cap). |
+| `probe.py` | Opt-in TCP connect to 8 ports, IPv4 inside `SCAN_RANGES` only, at most 256 hosts, 32 at a time. |
+| `runner.py` | Fetch → the three steps, each independent (one failing doesn't stop the others) → upload. |
+
+**Backend**
+| Piece | File | What it does |
+|---|---|---|
+| Usage history | `services/alerts.py` `record_usage` | On every IPAM check: one `subnet_usage` row per subnet per day (`$max` of the day). /30s and /64s are skipped (full by design / never full). |
+| Agent routes | `api/agent_ai.py` | Scoped to the agent: its devices, subnets holding its devices' addresses, MACs its switches saw. An upload replaces that agent's previous forecasts. Manual device types are never overwritten. |
+| Query guard | `ai/query_guard.py` | Deny-by-default allowlist: 9 collections, a field list per collection, stages `$match $project $sort $limit $count $group`, a few operators, regex ≤64 chars without nested quantifiers, depth/size/stage limits. |
+| Question parser | `ai/rules.py` | Regex rules for the common questions; its output goes through the same guard. |
+| Ask NetMap | `ai/nlsearch.py` | Rules → (LLM) → guard → typed values (ISO text → dates, hex → ObjectId) → `aggregate` on `app.state.ai_db` → table. |
+| LLM providers | `ai/llm.py` | Gemini, Groq, Ollama over plain httpx (no SDKs). Key in a header, never in a URL; response bodies never logged. |
+| Explanations | `ai/explain.py` | Server-built facts, `secret_free()` drops every line with `<masked>` or a secret word, data fence, 1200-character cap, built-in templates, cache by input hash. |
+| Routes | `api/ai.py`, `api/predictions.py` | Ask / explain / status, forecasts, type correction; per-user rate limit in `ai_calls`. |
+
+**Frontend**: `ForecastChart` (plain SVG, CSS classes only, table fallback), forecast panels
+on subnet and device pages, "Running out of addresses" on the dashboard, the Ask NetMap page
+and top-bar box, Explain buttons on alerts, findings and diffs, and type badges with an
+engineer-only "Correct type" control. AI text and query results are rendered as text only.
+
 ## MongoDB indexes
 | Collection | Index | Why |
 |---|---|---|
+| subnet_usage | `(subnet_id, day)` unique, `at` TTL (400 days) | one point per subnet per day; a year of history for forecasts |
+| predictions | `(kind, target_key)` unique, `generated_at` TTL (14 days) | one forecast per subnet / uplink; forecasts from a stopped agent disappear |
+| ai_explanations | `key` unique, `at` TTL (30 days) | cache: the same alert isn't sent to the model twice |
+| ai_calls | `(user_id, at)`, `at` TTL (10 minutes) | per-user AI rate limit |
 | devices | `mgmt_ip` unique, `status`, `(agent_id, mgmt_ip_key)` | one record per managed device; status filters; known-devices list |
 | interfaces | `(device_id, if_index)` unique, `mac` | one row per interface; LLDP chassis-ID matching and "is this MAC a known device?" |
 | ip_addresses | `ip_key` unique, `mac`, `reservation.hostname` (sparse), `device_id` (sparse) | the database itself refuses a duplicate IP record or reservation; IP-by-MAC and host-name lookups |

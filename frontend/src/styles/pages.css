@@ -1004,3 +1004,207 @@
   color: var(--muted);
   font-family: var(--font-ui);
 }
+
+/* ---------------------------------------------------------------- Phase 7: AI */
+.chart {
+  margin: var(--space-3) 0 0;
+}
+
+.chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 260px;
+  overflow: visible;
+}
+
+.chart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.chart-axis,
+.chart-mark {
+  fill: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+
+.chart-mark {
+  font-weight: 600;
+}
+
+.chart-band {
+  fill: color-mix(in srgb, var(--accent) 16%, transparent);
+  stroke: none;
+}
+
+.chart-history,
+.chart-forecast {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart-forecast {
+  stroke-dasharray: 6 4;
+}
+
+.chart-threshold {
+  stroke: var(--warn);
+  stroke-dasharray: 3 3;
+}
+
+.chart-capacity {
+  stroke: var(--down);
+}
+
+.chart-today {
+  stroke: var(--muted);
+  stroke-dasharray: 2 3;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-2);
+  color: var(--muted);
+}
+
+.legend::before {
+  content: "";
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  margin-right: var(--space-1);
+  vertical-align: middle;
+  border-top: 2px solid var(--accent);
+}
+
+.legend-forecast::before {
+  border-top-style: dashed;
+}
+
+.legend-band::before {
+  height: 10px;
+  border: 0;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.chart-table {
+  margin-top: var(--space-2);
+}
+
+.chart-table summary,
+.query-box summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+
+.forecast-warn {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.explain {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  margin-top: var(--space-2);
+}
+
+.explain-box {
+  width: 100%;
+  padding: var(--space-3);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--panel-sunken);
+}
+
+.explain-text {
+  margin: 0 0 var(--space-2);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.explain-box p:last-child {
+  margin-bottom: 0;
+}
+
+.type-info {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.type-info .plain-list {
+  margin: 0;
+}
+
+.inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ask-form {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.ask-form label {
+  font-weight: 600;
+}
+
+.ask-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ask-row input {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.ask-examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.chip {
+  padding: 2px var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.query-box {
+  margin-top: var(--space-3);
+}
+
+.query-box pre {
+  margin: var(--space-2) 0;
+}

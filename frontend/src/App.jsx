@@ -10,6 +10,7 @@ import AuditLog from "./pages/admin/AuditLog.jsx";
 import Notifications from "./pages/admin/Notifications.jsx";
 import Users from "./pages/admin/Users.jsx";
 import Alerts from "./pages/Alerts.jsx";
+import Ask from "./pages/Ask.jsx";
 import ChangeDetail from "./pages/ChangeDetail.jsx";
 import ChangeNew from "./pages/ChangeNew.jsx";
 import ChangePassword from "./pages/ChangePassword.jsx";
@@ -85,6 +86,7 @@ export default function App() {
           <Route path="ip/subnets/:id" element={<SubnetDetail />} />
           <Route path="ip/address/:ip" element={<IpDetail />} />
           <Route path="alerts" element={<Alerts />} />
+          <Route path="ask" element={<Ask />} />
           <Route
             path="topology"
             element={

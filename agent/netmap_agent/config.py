@@ -61,6 +61,13 @@ class AgentSettings(BaseSettings):
     # 60 on real devices. Only the simulator counts revert-timer minutes as seconds.
     change_revert_seconds_per_minute: int = Field(default=60, ge=1, le=60)
 
+    # Phase 7: forecasts, anomaly detection and device classification (runs on the agent).
+    ai_enabled: bool = True
+    ai_interval_seconds: int = Field(default=6 * 3600, ge=600, le=7 * 86400)
+    # Active scanning: off by default. When on, TCP connect to 8 ports, SCAN_RANGES only.
+    classify_port_probe: bool = False
+    classify_probe_timeout_ms: int = Field(default=500, ge=100, le=5000)
+
     @field_validator("scan_ranges", "snmp_targets", mode="before")
     @classmethod
     def split_commas(cls, value: object) -> object:

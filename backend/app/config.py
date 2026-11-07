@@ -66,6 +66,18 @@ class Settings(BaseSettings):
                                 pattern=r"^[^@\s,;<>]{1,64}@[A-Za-z0-9.-]{1,253}"
                                         r"(\s*,\s*[^@\s,;<>]{1,64}@[A-Za-z0-9.-]{1,253})*$")
 
+    # Phase 7: AI. "none" = only the built-in question parser and template explanations.
+    # gemini / groq are free-tier cloud APIs (key needed); ollama runs a model on this machine.
+    llm_provider: Literal["none", "gemini", "groq", "ollama"] = "none"
+    llm_api_key: SecretStr | None = None
+    llm_model: str = Field(default="", max_length=100, pattern=r"^[A-Za-z0-9._:/-]*$")
+    llm_base_url: str = Field(default="", max_length=200)
+    llm_timeout_seconds: float = Field(default=20, ge=2, le=120)
+    # Connection string of the read-only database user for Ask NetMap (Atlas: netmap_ai_ro).
+    # Empty: the main connection is used and the UI says so (development only).
+    ai_mongodb_uri: SecretStr | None = None
+    ai_calls_per_10_minutes: int = Field(default=20, ge=1, le=1000)
+
     # The built React app (npm run build), served from the same origin as the API. None, or a
     # folder without index.html, means API only (in development Vite serves the UI instead).
     frontend_dist: Path | None = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -86,6 +98,17 @@ class Settings(BaseSettings):
         local = base.startswith(("http://127.0.0.1:", "http://localhost:"))
         if not (base.startswith("https://") or local) or any(c in base for c in "?#@ "):
             raise ValueError("TELEGRAM_API_BASE must be an https:// URL")
+        return self
+
+    @model_validator(mode="after")
+    def check_llm(self) -> "Settings":
+        base = self.llm_base_url
+        if base:
+            local = base.startswith(("http://127.0.0.1:", "http://localhost:"))
+            if not (base.startswith("https://") or local) or any(c in base for c in "?#@ "):
+                raise ValueError("LLM_BASE_URL must be an https:// URL (or http://localhost)")
+        if self.llm_provider in ("gemini", "groq") and self.llm_api_key is None:
+            raise ValueError(f"LLM_PROVIDER={self.llm_provider} needs LLM_API_KEY")
         return self
 
     @property

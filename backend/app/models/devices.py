@@ -7,6 +7,17 @@ from pydantic import BaseModel
 from app.models.ipam import IpRow, Usage
 
 
+class ClassificationOut(BaseModel):
+    """Device type from the agent's classifier (Phase 7), or an engineer's correction."""
+
+    type: str
+    confidence: float | None = None
+    reasons: list[str] = []
+    source: str = "auto"  # auto | manual
+    by: str | None = None
+    at: datetime | None = None
+
+
 class DeviceOut(BaseModel):
     id: str
     mgmt_ip: str
@@ -20,6 +31,7 @@ class DeviceOut(BaseModel):
     snmp_v2c: bool = False
     last_seen: datetime | None = None
     last_polled_at: datetime | None = None
+    classification: ClassificationOut | None = None
 
 
 class InterfaceOut(BaseModel):
@@ -82,6 +94,16 @@ class AgentCheckIn(BaseModel):
     last_seen_at: datetime
 
 
+class FillingSubnet(BaseModel):
+    subnet_id: str
+    network: str
+    label: str
+    days_until_full: int
+    full_on: str | None = None
+    percent: float | None = None
+    method: str | None = None
+
+
 class DashboardSummary(BaseModel):
     devices: dict[str, int]  # total, up, snmp_error, down
     subnets: int
@@ -91,3 +113,5 @@ class DashboardSummary(BaseModel):
     alerts_by_type: dict[str, int]
     duplicate_ips: int
     last_agent_check_in: AgentCheckIn | None
+    # Subnets the forecast says will be full within FILLING_DAYS (Phase 7).
+    filling_soon: list[FillingSubnet] = []

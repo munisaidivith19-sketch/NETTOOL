@@ -280,3 +280,14 @@
     padding: var(--space-4);
   }
 }
+
+/* Phase 7: the "Ask NetMap" box at the left of the top bar. */
+.topbar-ask {
+  flex: 1 1 220px;
+  max-width: 420px;
+  margin-right: auto;
+}
+
+.topbar-ask input {
+  width: 100%;
+}

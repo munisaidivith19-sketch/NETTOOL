@@ -17,6 +17,11 @@ MAC_ENTRY_TTL_SECONDS = 7 * 24 * 60 * 60
 LINK_TTL_SECONDS = 7 * 24 * 60 * 60
 NOTIFICATIONS_TTL_SECONDS = 7 * 24 * 60 * 60
 LOGIN_ATTEMPTS_TTL_SECONDS = int(IP_WINDOW.total_seconds()) * 3
+# Phase 7
+SUBNET_USAGE_TTL_SECONDS = 400 * 24 * 60 * 60
+PREDICTIONS_TTL_SECONDS = 14 * 24 * 60 * 60
+EXPLANATIONS_TTL_SECONDS = 30 * 24 * 60 * 60
+AI_CALLS_TTL_SECONDS = 10 * 60
 
 # CLAUDE.md section 6. Unique indexes are what actually stop duplicates (e.g. two records for the
 # same IP); TTL indexes make MongoDB delete old metrics and expired sessions on its own.
@@ -101,6 +106,29 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("device_id", ASCENDING), ("created_at", DESCENDING)], name="device_created"),
         IndexModel([("status", ASCENDING), ("created_at", DESCENDING)], name="status_created"),
     ],
+    # Phase 7: AI. Daily subnet usage (forecast history), the agent's latest predictions,
+    # cached plain-language explanations and the per-user AI call log (rate limit).
+    "subnet_usage": [
+        IndexModel([("subnet_id", ASCENDING), ("day", ASCENDING)], unique=True,
+                   name="subnet_day_unique"),
+        IndexModel([("at", ASCENDING)], expireAfterSeconds=SUBNET_USAGE_TTL_SECONDS,
+                   name="at_ttl"),
+    ],
+    "predictions": [
+        IndexModel([("kind", ASCENDING), ("target_key", ASCENDING)], unique=True,
+                   name="kind_target_unique"),
+        IndexModel([("generated_at", ASCENDING)], expireAfterSeconds=PREDICTIONS_TTL_SECONDS,
+                   name="generated_ttl"),
+    ],
+    "ai_explanations": [
+        IndexModel([("key", ASCENDING)], unique=True, name="key_unique"),
+        IndexModel([("at", ASCENDING)], expireAfterSeconds=EXPLANATIONS_TTL_SECONDS,
+                   name="at_ttl"),
+    ],
+    "ai_calls": [
+        IndexModel([("user_id", ASCENDING), ("at", ASCENDING)], name="user_at"),
+        IndexModel([("at", ASCENDING)], expireAfterSeconds=AI_CALLS_TTL_SECONDS, name="at_ttl"),
+    ],
     "sessions": [
         # expireAfterSeconds=0: each document is deleted once its own expires_at time has passed.
         IndexModel([("expires_at", ASCENDING)], expireAfterSeconds=0, name="expires_at_ttl"),
@@ -127,12 +155,13 @@ INDEXES: dict[str, list[IndexModel]] = {
 }
 
 
-def create_client(settings: Settings) -> AsyncMongoClient:
+def create_client(settings: Settings, uri: str | None = None,
+                  appname: str = "netmap-backend") -> AsyncMongoClient:
     return AsyncMongoClient(
-        settings.mongodb_uri.get_secret_value(),
+        uri or settings.mongodb_uri.get_secret_value(),
         tz_aware=True,  # datetimes come back timezone-aware (UTC), never naive
         serverSelectionTimeoutMS=settings.mongodb_timeout_ms,  # fail fast, don't hang requests
-        appname="netmap-backend",
+        appname=appname,
     )
 
 

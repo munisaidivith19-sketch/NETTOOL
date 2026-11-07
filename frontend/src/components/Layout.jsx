@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { can, ROLE_LABELS } from "../auth/permissions.js";
 import { useSummary } from "./SummaryProvider.jsx";
@@ -13,6 +13,7 @@ const NAV = [
   { to: "/topology", label: "Topology" },
   { to: "/config", label: "Configuration" },
   { to: "/changes", label: "Changes" },
+  { to: "/ask", label: "Ask NetMap" },
 ];
 
 const ADMIN_NAV = [
@@ -65,6 +66,37 @@ function AlertCounter() {
   );
 }
 
+/* The top-bar question box: hands the question to the Ask page as navigation state. */
+function AskBox() {
+  const navigate = useNavigate();
+  const [question, setQuestion] = useState("");
+  return (
+    <form
+      className="topbar-ask"
+      role="search"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (question.trim().length < 2) return;
+        navigate("/ask", { state: { question: question.trim() } });
+        setQuestion("");
+      }}
+    >
+      <label htmlFor="topbar-ask" className="visually-hidden">
+        Ask NetMap
+      </label>
+      <input
+        id="topbar-ask"
+        type="text"
+        value={question}
+        maxLength={300}
+        placeholder="Ask NetMap…"
+        autoComplete="off"
+        onChange={(event) => setQuestion(event.target.value)}
+      />
+    </form>
+  );
+}
+
 export default function Layout() {
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -109,6 +141,7 @@ export default function Layout() {
       </nav>
       <div className="workspace">
         <header className="topbar">
+          <AskBox />
           <AlertCounter />
           <div className="user-chip">
             <span className="user-name">{user.username}</span>

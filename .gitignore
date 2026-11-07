@@ -27,3 +27,5 @@ frontend/.vite/
 Thumbs.db
 .vscode/
 .idea/
+# IEEE vendor list downloaded by the agent (python -m netmap_agent.ai_training.oui update)
+agent/oui.csv

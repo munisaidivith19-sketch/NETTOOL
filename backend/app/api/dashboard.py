@@ -8,7 +8,7 @@ import ipaddress
 
 from fastapi import APIRouter, Depends, Request
 
-from app.models.devices import AgentCheckIn, DashboardSummary, SubnetSummary
+from app.models.devices import AgentCheckIn, DashboardSummary, FillingSubnet, SubnetSummary
 from app.security.rbac import require_user
 from app.security.sessions import utcnow
 from app.services import ipam
@@ -19,6 +19,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"],
 
 TOP_SUBNETS = 5
 MAX_SUBNETS_SCANNED = 1000
+FILLING_DAYS = 90
 
 
 async def _counts(collection, match: dict, field: str) -> dict[str, int]:
@@ -52,6 +53,14 @@ async def summary(request: Request) -> DashboardSummary:
     agent = await db.agents.find_one(
         {"revoked_at": None, "last_seen_at": {"$ne": None}}, {"name": 1, "last_seen_at": 1},
         sort=[("last_seen_at", -1)])
+    filling = [FillingSubnet(subnet_id=str(p["subnet_id"]), network=p["network"],
+                             label=p.get("label") or p["network"],
+                             days_until_full=p["days_until_full"], full_on=p.get("full_on"),
+                             percent=p.get("percent"), method=p.get("method"))
+               async for p in db.predictions.find(
+                   {"kind": "subnet_exhaustion",
+                    "days_until_full": {"$ne": None, "$lte": FILLING_DAYS}},
+                   {"series": 0}).sort("days_until_full", 1).limit(TOP_SUBNETS)]
     return DashboardSummary(
         devices=devices,
         subnets=await db.subnets.count_documents({}),
@@ -62,4 +71,5 @@ async def summary(request: Request) -> DashboardSummary:
         duplicate_ips=by_type.get("duplicate_ip", 0),
         last_agent_check_in=AgentCheckIn(name=agent["name"], last_seen_at=agent["last_seen_at"])
         if agent else None,
+        filling_soon=filling,
     )

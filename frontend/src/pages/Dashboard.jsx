@@ -4,7 +4,7 @@ import HealthPanel from "../components/HealthPanel.jsx";
 import StatusMark from "../components/StatusMark.jsx";
 import { REFRESH_MS, useSummary } from "../components/SummaryProvider.jsx";
 import { Empty, ErrorNote, Loading, PageHead, Panel, SeverityBadge, UsageBar } from "../components/ui.jsx";
-import { ALERT_TYPES, formatDateTime, timeAgo } from "../format.js";
+import { ALERT_TYPES, formatDate, formatDateTime, timeAgo } from "../format.js";
 import { useResource } from "../hooks/useResource.js";
 
 // An agent that hasn't reported for this long is probably stopped (default poll is 5 min).
@@ -101,6 +101,36 @@ export default function Dashboard() {
                         {s.name && <span className="muted"> {s.name}</span>}
                       </Link>
                       <UsageBar usage={s.usage} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+
+            <Panel
+              title="Running out of addresses"
+              actions={
+                <Link to="/ask" className="text-link">
+                  Ask NetMap
+                </Link>
+              }
+            >
+              {!summary.filling_soon?.length ? (
+                <Empty>No subnet is forecast to fill within 90 days (forecasts need a few days of history).</Empty>
+              ) : (
+                <ul className="row-list">
+                  {summary.filling_soon.map((s) => (
+                    <li key={s.subnet_id}>
+                      <Link to={`/ip/subnets/${s.subnet_id}`} className="row-link">
+                        <span className="addr">{s.network}</span>
+                        {s.label !== s.network && <span className="muted"> {s.label}</span>}
+                      </Link>
+                      <span className="forecast-warn small">
+                        {s.days_until_full <= 0
+                          ? "Full now"
+                          : `Full in about ${s.days_until_full} days (${formatDate(s.full_on)})`}
+                      </span>
+                      {s.percent !== null && <span className="muted small"> · {s.percent} % used now</span>}
                     </li>
                   ))}
                 </ul>

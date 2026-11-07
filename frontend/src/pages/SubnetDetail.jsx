@@ -14,6 +14,7 @@ import {
   SuccessNote,
   UsageBar,
 } from "../components/ui.jsx";
+import { SubnetForecast } from "../components/aiParts.jsx";
 import { formatCount, formatDateTime, formatSize } from "../format.js";
 import { useResource } from "../hooks/useResource.js";
 import { IpTable, ipLink, ReserveForm, SubnetForm } from "./ipParts.jsx";
@@ -200,6 +201,8 @@ export default function SubnetDetail() {
               </>
             )}
           </Panel>
+
+          <SubnetForecast subnetId={id} />
 
           <Panel
             title="Next free IP"

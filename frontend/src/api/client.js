@@ -46,6 +46,10 @@ export function errorMessage(status, body) {
   if (typeof detail === "string") {
     return detail === "password_change_required" ? "You need to change your password first." : detail;
   }
+  // Some routes (Ask NetMap) send {"detail": {"message": "...", ...extra fields}}.
+  if (detail && typeof detail === "object" && !Array.isArray(detail) && typeof detail.message === "string") {
+    return detail.message;
+  }
   if (Array.isArray(detail) && detail.length > 0) {
     return detail
       .map((err) => {

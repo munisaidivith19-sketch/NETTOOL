@@ -12,10 +12,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app import db
+from app.ai.llm import make_provider
 from app.api import (
+    agent_ai,
     agent_config,
     agent_ingest,
     agents,
+    ai,
     alerts,
     audit,
     auth,
@@ -25,6 +28,7 @@ from app.api import (
     devices,
     ips,
     notifications,
+    predictions,
     subnets,
     topology,
     users,
@@ -44,7 +48,7 @@ API_ROUTERS = (
     auth.router, users.router, agents.router, audit.router, agent_ingest.router,
     subnets.router, ips.router, alerts.router, devices.router, dashboard.router,
     topology.router, notifications.router, configs.router, changes.router,
-    agent_config.router,
+    agent_config.router, agent_ai.router, ai.router, predictions.router,
 )
 
 
@@ -74,6 +78,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         client = db.create_client(settings)
         app.state.mongo = client
         app.state.db = client[settings.mongodb_db]
+        # Ask NetMap runs its queries through a read-only database user when one is set.
+        ai_client = None
+        if settings.ai_mongodb_uri is not None:
+            ai_client = db.create_client(settings, settings.ai_mongodb_uri.get_secret_value(),
+                                         appname="netmap-ai-readonly")
+        app.state.ai_db = (ai_client or client)[settings.mongodb_db]
+        app.state.ai_readonly_user = ai_client is not None
         try:
             await db.ensure_indexes(app.state.db)
             await ensure_first_admin(app.state.db, settings)
@@ -84,6 +95,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             await client.close()
+            if ai_client is not None:
+                await ai_client.close()
 
     # API docs reveal every route and schema, so they are switched off in production.
     docs_off = settings.is_production
@@ -96,6 +109,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None if docs_off else "/openapi.json",
     )
     app.state.settings = settings
+    # The language model for Ask NetMap and explanations (NoProvider when LLM_PROVIDER=none).
+    app.state.llm = make_provider(settings)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
 
     # Middleware runs outermost-last-added: SecurityMiddleware wraps everything, so even a 413 or

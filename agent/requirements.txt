@@ -1,5 +1,4 @@
 # Agent runtime dependencies, pinned. Python 3.10: pydantic-settings held at the last 3.10 release.
-# scikit-learn + Prophet are added in Phase 7.
 pysnmp==7.1.31
 # Needed by pysnmp for SNMPv3 privacy (AES); also used for the credential store in Phase 6.
 cryptography==50.0.2
@@ -11,3 +10,19 @@ python-dotenv==1.2.4
 # Phase 6: SSH config backup / push (pulls in paramiko 5.1.0) and the IOS denylist parser.
 netmiko==4.8.0
 ciscoconfparse2==0.9.18
+# Phase 7: AI on the agent (forecasting, anomaly detection). Last releases that support
+# Python 3.10 on Windows. Imported only inside the AI job, never during discovery.
+scikit-learn==1.7.2
+prophet==1.5.0
+cmdstanpy==1.3.0
+numpy==2.2.6
+pandas==2.3.3
+scipy==1.15.3
+holidays==0.107
+matplotlib==3.10.9
+# Pulled in by matplotlib. 12.3.0 is the last release for Python 3.10; its CVEs (image
+# decoding) are an accepted risk: NetMap never opens image files. See docs/known-limitations.md.
+pillow==12.3.0
+joblib==1.6.0
+threadpoolctl==3.7.0
+tqdm==4.70.1

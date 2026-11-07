@@ -15,7 +15,8 @@ logger = logging.getLogger("netmap.http")
 
 DEFAULT_BODY_LIMIT = 2 * 1024 * 1024
 # Agent discovery reports can be large; only this path gets the bigger limit (CLAUDE.md 7.4).
-LARGE_BODY_PATHS = {"/api/agent/report": 10 * 1024 * 1024}
+LARGE_BODY_PATHS = {"/api/agent/report": 10 * 1024 * 1024,
+                    "/api/agent/ai/predictions": 10 * 1024 * 1024}
 
 CSP = (
     "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "

@@ -4,6 +4,7 @@ import { ips as ipsApi } from "../api/api.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { can } from "../auth/permissions.js";
 import { ConfirmButton, Empty, ErrorNote, Loading, PageHead, Panel, SuccessNote } from "../components/ui.jsx";
+import { TypeInfo } from "../components/aiParts.jsx";
 import { formatDateTime, timeAgo } from "../format.js";
 import { useResource } from "../hooks/useResource.js";
 import { IpStatus, ReserveForm } from "./ipParts.jsx";
@@ -92,6 +93,14 @@ export default function IpDetail() {
                 <dt>Subnet</dt>
                 <dd>{d.subnet ? <span className="addr">{d.subnet.network}</span> : "Not inside any known subnet"}</dd>
               </div>
+              {d.mac && (
+                <div>
+                  <dt>Device type</dt>
+                  <dd>
+                    <TypeInfo mac={d.mac} classification={d.classification} onChanged={reload} />
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt>Seen via</dt>
                 <dd>{d.sources.length ? d.sources.join(", ") : "–"}</dd>

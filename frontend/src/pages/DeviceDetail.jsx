@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { devices as devicesApi } from "../api/api.js";
+import { DeviceForecast, TypeBadge } from "../components/aiParts.jsx";
 import StatusMark from "../components/StatusMark.jsx";
 import { Badge, Empty, ErrorNote, Loading, PageHead, Panel } from "../components/ui.jsx";
 import { formatBps, formatDateTime, formatUptime, timeAgo } from "../format.js";
@@ -47,6 +48,7 @@ export default function DeviceDetail() {
                 ["Since", formatDateTime(d.status_changed_at)],
                 ["Management IP", <span className="addr">{d.mgmt_ip}</span>],
                 ["Vendor", d.vendor],
+                ["Type", d.classification ? <TypeBadge key="t" classification={d.classification} /> : "–"],
                 ["Location", d.sys_location || "–"],
                 [
                   "SNMP",
@@ -110,6 +112,8 @@ export default function DeviceDetail() {
               </div>
             )}
           </Panel>
+
+          <DeviceForecast deviceId={id} />
 
           <Panel title={`Neighbours (${d.links.length})`}>
             {d.links.length === 0 ? (

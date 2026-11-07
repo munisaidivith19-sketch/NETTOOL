@@ -120,3 +120,15 @@ class Uploader:
 
     def job_status(self, change_id: str, payload: dict) -> dict:
         return self.request("POST", f"/api/agent/jobs/{change_id}/status", payload)
+
+    def ai_training_data(self) -> dict:
+        return self.request("GET", "/api/agent/ai/training-data")
+
+    def send_predictions(self, payload: dict) -> dict:
+        return self.request("POST", "/api/agent/ai/predictions", payload)
+
+    def send_anomalies(self, payload: dict) -> dict:
+        return self.request("POST", "/api/agent/ai/anomalies", payload)
+
+    def send_classifications(self, payload: dict) -> dict:
+        return self.request("POST", "/api/agent/ai/classifications", payload)

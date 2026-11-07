@@ -98,3 +98,17 @@ export const changes = {
   reject: (id, reason) => request("POST", `/api/changes/${enc(id)}/reject`, { body: { reason } }),
   cancel: (id) => request("POST", `/api/changes/${enc(id)}/cancel`),
 };
+
+export const ai = {
+  status: (options) => request("GET", "/api/ai/status", options),
+  ask: (question) => request("POST", "/api/ai/ask", { body: { question } }),
+  explain: (body) => request("POST", "/api/ai/explain", { body }),
+};
+
+export const predictions = {
+  list: (query, options) => request("GET", "/api/predictions", { query, ...options }),
+  subnet: (id, options) => request("GET", `/api/subnets/${enc(id)}/forecast`, options),
+  device: (id, query, options) => request("GET", `/api/devices/${enc(id)}/forecast`, { query, ...options }),
+  correctType: (mac, type) => request("PUT", `/api/macs/${enc(mac)}/classification`, { body: { type } }),
+  resetType: (mac) => request("DELETE", `/api/macs/${enc(mac)}/classification`),
+};

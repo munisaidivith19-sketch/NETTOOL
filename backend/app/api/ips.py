@@ -92,13 +92,18 @@ async def ip_detail(request: Request, ip: IpPath) -> dict:
     alert = await db.alerts.find_one({"key": f"duplicate_ip:{key}", "status": "open"},
                                      {"_id": 0, "message": 1, "details": 1, "opened_at": 1})
     cutoff = ipam.stale_cutoff(now, settings.ip_stale_days)
+    mac = record.get("mac") if record else None
+    endpoint = (await db.mac_addresses.find_one({"mac": mac}, {"classification": 1})
+                if mac else None)
     return {
         "ip": str(address),
         "version": address.version,
         "status": ipam.ip_status(record, cutoff) if record else "free",
         "subnet": {"id": str(subnet["_id"]), "network": subnet["network"],
                    "name": subnet.get("name")} if subnet else None,
-        "mac": record.get("mac") if record else None,
+        "mac": mac,
+        # Device type from the agent's classifier, or an engineer's correction (Phase 7).
+        "classification": (endpoint or {}).get("classification"),
         "macs_recent": sorted({s["mac"] for s in seen_by if s["recent"]}),
         "sources": record.get("sources", []) if record else [],
         "reservation": record.get("reservation") if record else None,

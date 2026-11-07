@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { configs as configsApi } from "../api/api.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { can } from "../auth/permissions.js";
+import { ExplainButton } from "../components/aiParts.jsx";
 import DiffView from "../components/DiffView.jsx";
 import { Badge, Empty, ErrorNote, Loading, PageHead, Panel, SeverityBadge } from "../components/ui.jsx";
 import { formatDateTime, timeAgo } from "../format.js";
@@ -36,6 +37,7 @@ function Findings({ device, report, canChange }) {
               <p className="small muted">Replace the &lt;placeholders&gt; with your own values before using it.</p>
             )}
           </details>
+          <ExplainButton request={{ kind: "finding", id: device.id, rule: f.rule }} />
           {canChange && device.config_vendor && (
             <button
               type="button"
@@ -177,6 +179,15 @@ function Versions({ deviceId }) {
             v{view.data.from.version} → v{view.data.to.version}{" "}
             <span className="muted small">({view.data.changed_lines} changed lines)</span>
           </h3>
+          <ExplainButton
+            label="Explain this change"
+            request={{
+              kind: "diff",
+              id: deviceId,
+              from_version: view.data.from.version,
+              to_version: view.data.to.version,
+            }}
+          />
           <DiffView
             rows={view.data.rows}
             fromLabel={`v${view.data.from.version} (${formatDateTime(view.data.from.taken_at)})`}

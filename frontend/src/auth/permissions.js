@@ -10,6 +10,8 @@ const RULES = {
   // Config text (even masked) and change requests: engineers and admins.
   "config.read": ["admin", "engineer"],
   "change.write": ["admin", "engineer"],
+  // Correcting an endpoint's device type (Phase 7).
+  "type.correct": ["admin", "engineer"],
   "admin.view": ["admin"],
 };
 

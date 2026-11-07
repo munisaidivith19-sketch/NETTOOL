@@ -4,6 +4,7 @@ import { alerts as alertsApi } from "../api/api.js";
 import { useAuth } from "../auth/AuthProvider.jsx";
 import { can } from "../auth/permissions.js";
 import { useSummary } from "../components/SummaryProvider.jsx";
+import { ExplainButton } from "../components/aiParts.jsx";
 import { Badge, Empty, ErrorNote, Loading, PageHead, Panel, SeverityBadge } from "../components/ui.jsx";
 import { ALERT_TYPES, formatDateTime, timeAgo } from "../format.js";
 import { useResource } from "../hooks/useResource.js";
@@ -44,6 +45,7 @@ function AlertCard({ alert, canAct, onAction }) {
           ` · resolved ${formatDateTime(alert.resolved_at)}${alert.resolved_by ? ` by ${alert.resolved_by}` : " automatically"}`}
       </p>
       <ErrorNote error={error} />
+      <ExplainButton request={{ kind: "alert", id: alert.id }} />
       {canAct && alert.status === "open" && (
         <div className="form-actions">
           {!alert.acknowledged_by && (

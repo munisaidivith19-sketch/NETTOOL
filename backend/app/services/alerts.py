@@ -15,7 +15,7 @@ An alert that is opened or reopened gets notify_pending=True; services/notify.py
 """
 
 import ipaddress
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
 from pymongo.asynchronous.database import AsyncDatabase
@@ -29,6 +29,8 @@ from app.services.ipaddr import key_to_ip
 USAGE_HYSTERESIS = 5
 # Point-to-point links (/30, /31, /32, IPv6 /126+) are full by design; don't alert on them.
 MIN_USABLE_FOR_USAGE_ALERT = 6
+# A /64 never runs out, so it gets no history or forecast.
+MAX_USABLE_FOR_HISTORY = 1_000_000
 
 
 async def upsert_alert(db: AsyncDatabase, *, key: str, type_: str, severity: str, message: str,
@@ -102,6 +104,18 @@ async def check_duplicate_ips(db: AsyncDatabase, settings: Settings, now: dateti
     return active
 
 
+async def record_usage(db: AsyncDatabase, subnet: dict, used: int, usable: int,
+                       now: datetime) -> None:
+    """One point per subnet per day (the day's highest count): the history the agent's
+    exhaustion forecast learns from (Phase 7)."""
+    day = now.astimezone(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    await db.subnet_usage.update_one(
+        {"subnet_id": subnet["_id"], "day": day.date().isoformat()},
+        {"$max": {"used": used}, "$set": {"usable": usable, "network": subnet["network"]},
+         "$setOnInsert": {"at": day}},
+        upsert=True)
+
+
 async def check_subnet_usage(db: AsyncDatabase, settings: Settings, now: datetime) -> set[str]:
     threshold = settings.subnet_usage_alert_percent
     cutoff = ipam.stale_cutoff(now, settings.ip_stale_days)
@@ -110,9 +124,13 @@ async def check_subnet_usage(db: AsyncDatabase, settings: Settings, now: datetim
     active = set()
     async for subnet in db.subnets.find({}, {"network": 1, "name": 1}).limit(5000):
         net = ipaddress.ip_network(subnet["network"])
-        if ipam.usable_count(net) < MIN_USABLE_FOR_USAGE_ALERT:
+        usable = ipam.usable_count(net)
+        if usable < MIN_USABLE_FOR_USAGE_ALERT:
             continue
-        stats = ipam.usage(net, await ipam.count_used(db, net, cutoff))
+        used = await ipam.count_used(db, net, cutoff)
+        if usable <= MAX_USABLE_FOR_HISTORY:
+            await record_usage(db, subnet, used, usable, now)
+        stats = ipam.usage(net, used)
         key = f"subnet_usage:{subnet['network']}"
         percent = stats["percent"]
         if percent >= threshold or (key in open_keys and percent >= threshold - USAGE_HYSTERESIS):

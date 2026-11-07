@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/alerts", tags=["alerts"], dependencies=[Depends(
 require_engineer = require_role("admin", "engineer")
 
 AlertType = Literal["duplicate_ip", "subnet_usage", "device_down", "interface_down",
-                    "new_mac", "anomaly", "compliance", "config_changed", "change_failed"]
+                    "new_mac", "traffic_anomaly", "compliance", "config_changed", "change_failed"]
 
 
 def alert_out(doc: dict) -> AlertOut:

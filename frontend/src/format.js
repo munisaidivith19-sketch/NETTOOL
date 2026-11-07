@@ -98,8 +98,27 @@ export const ALERT_TYPES = {
   device_down: "Device down",
   interface_down: "Uplink down",
   new_mac: "New device (MAC)",
-  anomaly: "Anomaly",
+  traffic_anomaly: "Traffic anomaly",
   compliance: "Compliance",
   config_changed: "Config changed",
   change_failed: "Change failed",
 };
+
+/* Device types from the agent's classifier (Phase 7). */
+export const DEVICE_TYPES = {
+  pc: "PC / laptop",
+  printer: "Printer",
+  phone: "Phone",
+  camera: "Camera",
+  access_point: "Access point",
+  network_device: "Network device",
+  server_vm: "Server / VM",
+  unknown: "Unknown",
+};
+
+export function formatDate(value) {
+  if (!value) return "–";
+  const date = new Date(value.length === 10 ? `${value}T00:00:00Z` : value);
+  if (Number.isNaN(date.getTime())) return "–";
+  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+}

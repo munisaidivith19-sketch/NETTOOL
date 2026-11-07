@@ -4,7 +4,7 @@ AI-assisted network mapping, IP address management and monitoring for small and 
 organizations (colleges, hospitals, SMEs). See `CLAUDE.md` for the full brief and security rules,
 and `PHASE_PROMPTS.md` for the build plan.
 
-**Status: Phase 6 done.** The backend has accounts, roles, sessions, CSRF protection, an audit
+**Status: Phase 7 done.** The backend has accounts, roles, sessions, CSRF protection, an audit
 log and HMAC-signed agent authentication (see `docs/auth-design.md`). The agent discovers the
 network: it pings ranges, polls devices over SNMPv3 (system info, interfaces, IPv4/IPv6
 addresses, ARP and IPv6 neighbours), detects the vendor and sends a signed report that the
@@ -22,8 +22,15 @@ agent. Passwords and keys are masked before upload. The dashboard shows version 
 side-by-side diff, a compliance score with a suggested fix for each finding, and a flag for
 devices still at factory settings. Changes follow a safe path: template or own commands →
 dry-run preview → denylist check → approval by a second person → the agent pushes with an
-automatic rollback timer → verify → done or rolled back. A simulated six-device campus (SNMP
-plus a fake Cisco SSH server) lets you run everything without any hardware.
+automatic rollback timer → verify → done or rolled back. Phase 7 adds AI. The agent forecasts
+when each subnet runs out of addresses and when uplinks get busy (Prophet, or a straight line
+when history is short). It flags unusual interface traffic (IsolationForest) with a plain
+explanation, and guesses what each endpoint is (PC, printer, phone, camera, AP, VM...) and why.
+**Ask NetMap** answers plain-English questions with a read-only, allowlisted database query
+that is shown to you, and **Explain** buttons describe alerts, compliance findings and config
+diffs in plain language. Both work without any API key; a free Gemini/Groq key or a local
+Ollama model is optional. A simulated six-device campus (SNMP plus a fake Cisco SSH server)
+lets you run everything without any hardware.
 
 ```
 agent/     runs inside the private network; discovers and polls devices (Python)
@@ -124,6 +131,28 @@ notification" button. Tokens and passwords go in the server's environment only, 
   With Gmail, use an app password. Render's free tier may block outgoing SMTP ports; Telegram
   works there.
 
+### AI: Ask NetMap and explanations (optional language model)
+Ask NetMap and the Explain buttons work without any key: a built-in parser understands common
+questions ("Which switch port is 10.10.10.20 on?", "Show down devices", "Which subnets will be
+full within 90 days?", "Show all printers", "Devices made by Cisco"...), and explanations come
+from built-in text. To let a language model handle other questions, set in `.env`:
+
+| `LLM_PROVIDER` | Key | Notes |
+|---|---|---|
+| `none` (default) | – | built-in parser and texts only |
+| `gemini` | `LLM_API_KEY` from Google AI Studio | free tier |
+| `groq` | `LLM_API_KEY` from console.groq.com | free tier |
+| `ollama` | – | a model on this machine (`ollama pull llama3.2`), `http://127.0.0.1:11434` |
+
+The model only ever sees your question and a fixed list of collections and fields, never your
+network data. Its answer must pass an allowlist (read-only stages, no users, sessions, audit
+log or configs) and runs with a 3-second limit and at most 100 rows. The page always shows the
+query that ran. In production set `AI_MONGODB_URI` to a read-only Atlas user (`netmap_ai_ro`);
+without it the page says it is in development mode. Each user gets `AI_CALLS_PER_10_MINUTES`
+(default 20) questions and explanations. Routes: `POST /api/ai/ask`, `POST /api/ai/explain`,
+`GET /api/ai/status`, `GET /api/predictions`, `GET /api/subnets/{id}/forecast`,
+`GET /api/devices/{id}/forecast`, `PUT|DELETE /api/macs/{mac}/classification` (engineer).
+
 Open http://127.0.0.1:8000/health. It returns `{"status":"ok","database":"ok"}`, or HTTP 503
 with `"database":"unavailable"` if MongoDB is not reachable. API docs are at `/docs` in
 development and switched off when `ENV=production`.
@@ -188,6 +217,34 @@ their own change only with a written reason, which is audit-logged. The agent pu
 a minute. The change page shows each step on a timeline, plus the agent's log. A rollback
 raises a critical alert. A change may not contain passwords or keys, because it would be
 stored; set those on the device directly.
+
+### AI: forecasts, anomalies and device types
+The agent's AI step runs every `AI_INTERVAL_SECONDS` (default 6 hours), on the agent machine
+(Render's 512 MB couldn't hold Prophet). `python -m netmap_agent.main --ai-only` runs it once.
+Each run:
+1. fetches its own training data from the backend (`GET /api/agent/ai/training-data`): daily
+   subnet usage, 7 days of uplink traffic, and the MACs its switches saw
+2. forecasts subnet exhaustion (Prophet with ≥14 days of history, a straight line with
+   3–13 days, nothing with less) and uplink bandwidth for the next 7 days
+3. checks every uplink's newest 2 hours for unusual traffic (IsolationForest, ≥1 day of history)
+4. classifies endpoints from the MAC vendor (OUI), SNMP data and network names; optionally
+   also from open ports (`CLASSIFY_PORT_PROBE=true`: TCP connect to 8 ports, only inside
+   `SCAN_RANGES`, off by default because it is active scanning)
+5. uploads the results; an unusual interface opens a `traffic_anomaly` alert
+
+An engineer can correct a device type on the IP detail page; a correction always wins over the
+classifier. For more vendors, `python -m netmap_agent.ai_training.oui update` downloads the
+IEEE list (saved as `agent/oui.csv`, git-ignored).
+
+**Demo history.** The simulator has no past, so forecasts would show "not enough data". In
+development, fill the database with 60 days of synthetic subnet usage and 7 days of uplink
+traffic (with one traffic spike), then run the AI step:
+```powershell
+cd backend; python scripts\seed_demo_history.py     # refuses to run when ENV=production
+cd ..\agent; python -m netmap_agent.main --ai-only
+```
+The seeded history is invented, so the forecast will not match the live "used" count of the
+simulator.
 
 ### Simulated network (no lab needed)
 `agent/simulation/` describes a small campus. Each device listens on its own loopback address,

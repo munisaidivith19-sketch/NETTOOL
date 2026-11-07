@@ -23,8 +23,10 @@ These have fixes only in versions that **require Python 3.11+**, so they cannot 
 
 | dnspython 2.8.0 | agent runtime (Phase 6, pulled in by ciscoconfparse2; also in the backend) | the same CVE | **Very low.** ciscoconfparse2 imports dnspython for optional DNS helper functions that NetMap never calls. The agent and backend parse configs only; no DNS messages are processed through it. |
 
+| pillow 12.3.0 | agent runtime (Phase 7, pulled in by matplotlib, which Prophet imports) | 39 findings (CVE-2026-112406, CVE-2026-96638 and others; all fixed in 13.0.0) in image decoding and file handling | **Very low.** NetMap never opens, decodes or receives image files; matplotlib is only imported because Prophet's plotting module is, and NetMap never plots. Pillow 13 requires Python 3.11+. |
+
 The agent's runtime dependencies had no known vulnerabilities at Phase 0 or Phase 2. In
-Phase 6 the only finding is the dnspython one above.
+Phase 6 the only finding is the dnspython one above; Phase 7 adds the Pillow one.
 `snmpsim` and `pysmi` (the simulator) are dev-only.
 
 ## Phase 1 (authentication)
@@ -149,3 +151,34 @@ Phase 6 the only finding is the dnspython one above.
   approval and push (someone typed on the CLI), the agent refuses with `config_changed`. The
   change must be re-created and approved against the new config.
 - **Config history keeps the last 50 versions per device.** Older versions are deleted.
+
+## Phase 7 (AI)
+- **Forecasts need history.** A subnet needs 3 days of usage for a straight-line forecast and
+  14 for Prophet; an uplink needs a day of traffic. A new install shows "not enough data" at
+  first. `backend/scripts/seed_demo_history.py` fills a development database with invented
+  history; its forecasts don't match the simulator's live counts.
+- **Forecasts assume the past continues.** A new building, a term starting or a DHCP change
+  breaks the trend. The likely range widens with distance, but it can't foresee events.
+- **The device-type classifier is a set of rules, not a trained model.** It is as good as its
+  clues: a MAC vendor that makes both PCs and printers (HP) is ambiguous without port probing,
+  randomised phone MACs carry no vendor, and an unknown vendor gives "unknown". Every guess
+  shows its reasons and confidence, and engineers can correct it.
+- **Port probing is active scanning.** It is off by default. Some organisations (hospitals,
+  OT networks) forbid it; check before enabling `CLASSIFY_PORT_PROBE`.
+- **Anomaly detection finds "unusual", not "malicious".** A legitimate backup at a new time
+  also triggers it. It looks only at uplinks and routed interfaces (where metrics are kept),
+  checks the newest 2 hours each run, and needs a day of history per interface.
+- **The language model can misunderstand a question.** That is why the query that ran is
+  always shown. The guard makes a wrong query harmless (read-only, limited), not correct.
+- **The built-in parser knows a fixed set of question shapes.** Other wording gets "not
+  understood" unless a language model is configured.
+- **Read-only database user in development.** Local MongoDB has no users, so without
+  `AI_MONGODB_URI` the main connection runs the (still guarded) queries, and the UI says so.
+  In production create the Atlas user `netmap_ai_ro` with role `read` on `netmap`.
+- **Free-tier limits.** Gemini and Groq free tiers have daily quotas and may change their
+  terms; a quota error shows a message and the built-in parser/templates keep working.
+  Questions (not network data) are sent to that provider.
+- **Install size.** Prophet, Stan, pandas, scikit-learn and matplotlib add several hundred MB
+  to the agent's virtual environment. The backend has none of them.
+- **Explanation cache.** A model explanation is cached for 30 days by its exact input; an
+  alert whose details change gets a new one.
