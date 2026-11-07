@@ -7,4 +7,4 @@ pip-audit==2.10.1
 # SNMP simulator for simulation mode and the end-to-end test. snmpsim imports pysmi but
 # doesn't declare it, so it is pinned here too.
 snmpsim==1.2.2
-pysmi==1.6.3
+pysmi==2.0.0
