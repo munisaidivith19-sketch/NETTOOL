@@ -4,3 +4,7 @@ pytest==9.1.1
 ruff==0.17.4
 bandit==1.9.4
 pip-audit==2.10.1
+# SNMP simulator for simulation mode and the end-to-end test. snmpsim imports pysmi but
+# doesn't declare it, so it is pinned here too.
+snmpsim==1.2.2
+pysmi==1.6.3

@@ -1,0 +1,2 @@
+# Simulator data is compared byte-for-byte with its generator (agent/tests/test_simulation.py)
+*.snmprec text eol=lf

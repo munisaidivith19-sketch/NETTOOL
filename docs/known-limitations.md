@@ -19,9 +19,10 @@ These have fixes only in versions that **require Python 3.11+**, so they cannot 
 | Package | Where | Finding | Risk here |
 |---|---|---|---|
 | dnspython 2.8.0 | backend runtime (pulled in by pymongo) | CVE-2026-114605: a crafted DNS message can make name decompression use excessive CPU | **Low.** pymongo only uses dnspython to resolve the `mongodb+srv://` SRV/TXT records of our own Atlas cluster through the system resolver. Exploiting it needs a malicious DNS resolver or an on-path attacker answering those lookups, and the impact is CPU use (DoS), not code execution. Not used at all with a plain `mongodb://` URI. |
-| filelock 4.1.0 | **dev only** (pulled in by pip-audit's cache) | 16 CVEs (CVE-2026-1129xx) in lock-file handling: symlink races, ACL/mode handling, stale-lock eviction | **Very low.** Not installed on Render. Only reachable by a local attacker on the developer's own machine, during `pip-audit` runs. |
+| filelock 4.1.0 | **dev only** (pulled in by pip-audit's cache) | 17 CVEs (CVE-2026-1129xx) in lock-file handling: symlink races, ACL/mode handling, stale-lock eviction | **Very low.** Not installed on Render. Only reachable by a local attacker on the developer's own machine, during `pip-audit` runs. |
 
-The agent's runtime dependencies had no known vulnerabilities at Phase 0.
+The agent's runtime dependencies had no known vulnerabilities at Phase 0 or Phase 2.
+`snmpsim` and `pysmi` (the simulator) are dev-only.
 
 ## Phase 1 (authentication)
 - **Client IP behind a proxy.** Rate limiting and the audit log use the connecting address. On
@@ -37,6 +38,23 @@ The agent's runtime dependencies had no known vulnerabilities at Phase 0.
 - **The `Secure` cookie on http://localhost** works in Chrome, Edge and Firefox, which treat
   localhost as secure, but not in Safari. Use one of the first three for local development.
 - **No TOTP MFA yet** (Phase 8).
+
+## Phase 2 (discovery)
+- **SNMP credentials sit in the agent's `.env` in plain text** until Phase 6 adds the
+  encrypted credential store. Protect that file like a password file. They never reach the
+  backend.
+- **Devices are identified by management IP.** A device polled through two different
+  addresses becomes two records. Merging by serial number or chassis MAC is not done yet.
+- **No switch-port mapping yet.** We know IP to MAC (from ARP) but not yet MAC to switch port
+  (BRIDGE-MIB forwarding table), and there are no LLDP/CDP neighbours. Both come with
+  IPAM/topology in later phases.
+- **Ping sweep is capped** at 1,024 addresses per range and 4,096 in total, and uses one OS
+  `ping` process per address (32 at a time). Larger networks need several agents or ranges
+  that change between cycles.
+- **Device status needs ping to tell `down` from `snmp_error`.** In the loopback simulation
+  every address answers ping, so a stopped simulated device shows `snmp_error`, never `down`.
+- **Two agents polling the same device** both update it; the last report wins.
+- **Interfaces that disappear** from a device's table are deleted, not kept as history.
 
 ## Other
 - The UI has been checked by automated tests and a production build only. No visual review in

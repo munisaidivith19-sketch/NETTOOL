@@ -132,7 +132,13 @@ agent_nonces`
 - Indexes: `devices.mgmt_ip` unique, `ip_addresses.ip_key` unique, `subnets.network` unique,
   `alerts.key` unique, `users.username` unique, TTL on `metrics.ts` (7 days) and `sessions.expires_at`,
   `sessions.token_hash` unique, `agent_nonces (agent_id, nonce)` unique + TTL 10 min,
-  `login_attempts.at` TTL. Index list lives in `backend/app/db.py`.
+  `login_attempts.at` TTL, `interfaces (device_id, if_index)` unique,
+  `arp_entries (ip_key, mac, device_id)` unique. Index list lives in `backend/app/db.py`.
+- Device `status` is `up` | `snmp_error` | `down` (see `backend/app/services/ingest.py`).
+  Discovered subnets are written with `$setOnInsert` only, so manual subnet fields are never
+  overwritten by discovery.
+- The agent runs asyncio on the selector loop on Windows (`snmp.use_selector_event_loop`); the
+  proactor loop breaks every SNMP poll after one ICMP port-unreachable.
 - Every API router is listed in `API_ROUTERS` in `backend/app/main.py`; tests/test_rbac.py checks
   each route has an access dependency. Path-param patterns go inside `Path(...)` (see
   `models/common.py`), not on an Annotated alias with a separate `= Path()`.

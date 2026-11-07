@@ -14,10 +14,10 @@ def test_package_imports():
 
 
 def test_comma_separated_lists_from_env(monkeypatch):
-    monkeypatch.setenv("SCAN_RANGES", "10.0.10.0/24, 2001:db8:10::/64")
+    monkeypatch.setenv("SCAN_RANGES", "10.0.10.0/24, 2001:db8:10::/120")
     monkeypatch.setenv("SNMP_TARGETS", "127.0.0.11:1161,127.0.0.12")
     settings = make()
-    assert settings.scan_ranges == ["10.0.10.0/24", "2001:db8:10::/64"]
+    assert settings.scan_ranges == ["10.0.10.0/24", "2001:db8:10::/120"]
     assert settings.snmp_targets == ["127.0.0.11:1161", "127.0.0.12"]
 
 

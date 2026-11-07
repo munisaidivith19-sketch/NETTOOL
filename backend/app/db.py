@@ -16,9 +16,27 @@ LOGIN_ATTEMPTS_TTL_SECONDS = int(IP_WINDOW.total_seconds()) * 3
 # CLAUDE.md section 6. Unique indexes are what actually stop duplicates (e.g. two records for the
 # same IP); TTL indexes make MongoDB delete old metrics and expired sessions on its own.
 INDEXES: dict[str, list[IndexModel]] = {
-    "devices": [IndexModel([("mgmt_ip", ASCENDING)], unique=True, name="mgmt_ip_unique")],
-    "ip_addresses": [IndexModel([("ip_key", ASCENDING)], unique=True, name="ip_key_unique")],
+    "devices": [
+        IndexModel([("mgmt_ip", ASCENDING)], unique=True, name="mgmt_ip_unique"),
+        IndexModel([("status", ASCENDING)], name="status"),
+        IndexModel([("agent_id", ASCENDING), ("mgmt_ip_key", ASCENDING)], name="agent_ip"),
+    ],
+    "interfaces": [
+        IndexModel([("device_id", ASCENDING), ("if_index", ASCENDING)], unique=True,
+                   name="device_ifindex_unique"),
+    ],
+    "ip_addresses": [
+        IndexModel([("ip_key", ASCENDING)], unique=True, name="ip_key_unique"),
+        IndexModel([("mac", ASCENDING)], name="mac"),
+    ],
     "subnets": [IndexModel([("network", ASCENDING)], unique=True, name="network_unique")],
+    "arp_entries": [
+        # One row per (IP, MAC, reporting device); two MACs on one IP = a duplicate IP (Phase 3).
+        IndexModel([("ip_key", ASCENDING), ("mac", ASCENDING), ("device_id", ASCENDING)],
+                   unique=True, name="ip_mac_device_unique"),
+        IndexModel([("mac", ASCENDING)], name="mac"),
+        IndexModel([("last_seen", DESCENDING)], name="last_seen_desc"),
+    ],
     "alerts": [IndexModel([("key", ASCENDING)], unique=True, name="key_unique")],
     "users": [IndexModel([("username", ASCENDING)], unique=True, name="username_unique")],
     "metrics": [

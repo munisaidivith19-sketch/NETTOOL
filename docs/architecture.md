@@ -34,11 +34,56 @@ Accounts, roles, server-side sessions, CSRF protection, login rate limiting and 
 security headers, the audit log, admin user management, and agent keys with HMAC-signed
 requests. Design and reasoning: `docs/auth-design.md`.
 
+## Added in Phase 2: discovery
+```
+ agent cycle (every POLL_INTERVAL_SECONDS, never overlapping)
+  1. GET  /api/agent/known-devices      which devices this agent already polls
+  2. ping sweep                         OS ping, 32 at a time, IPs validated first
+  3. SNMP poll                          pysnmp asyncio, 16 devices at a time, SNMPv3 authPriv
+  4. POST /api/agent/report             one signed JSON report (max 10 MB)
+                                        retried with backoff on 429/5xx/connection errors
+ backend
+  5. validate the whole report          strict models: list caps, IP/MAC/OID patterns
+  6. bulk upserts                       devices, interfaces, subnets, ip_addresses, arp_entries
+  7. audit "agent.report"               counts only, not the network's contents
+```
+
+**What the agent reads over SNMP** (numeric OIDs, no MIB files):
+| Data | Table | Older fallback |
+|---|---|---|
+| name, description, location, vendor, uptime | SNMPv2-MIB system group | |
+| interfaces | IF-MIB ifTable + ifXTable | |
+| IPv4 + IPv6 addresses with prefix length | IP-MIB ipAddressTable | ipAddrTable (IPv4) |
+| ARP + IPv6 neighbours | IP-MIB ipNetToPhysicalTable | ipNetToMediaTable (IPv4) |
+
+The vendor comes from the IANA enterprise number inside `sysObjectID` (9 Cisco, 14988
+MikroTik, ...).
+
+**How the backend stores it.** Every write is an upsert on a unique key, so a repeated report
+never creates duplicates:
+| Collection | Key | Notes |
+|---|---|---|
+| devices | `mgmt_ip` | `status` is `up` (SNMP answered), `snmp_error` (ping only) or `down`; `status_changed_at`; `snmp_v2c` flags clear-text SNMP |
+| interfaces | `(device_id, if_index)` | rows the device no longer reports are removed |
+| subnets | `network` | created from interface prefixes with `$setOnInsert` only, so a subnet edited by hand is never overwritten; `/32` and `/128` are skipped |
+| ip_addresses | `ip_key` | `sources`: `interface`, `arp`, `ping`; a silent ping never creates a record |
+| arp_entries | `(ip_key, mac, device_id)` | one row per IP+MAC pair, so two MACs on one IP stay visible for duplicate-IP detection (Phase 3) |
+
+Only things that answer SNMP become devices. A PC that only answers ping is an `ip_addresses`
+record.
+
+**Windows event loop.** The agent runs asyncio on the selector loop on Windows. With Python
+3.10's default proactor loop, one target replying "port unreachable" stopped the shared SNMP
+socket, and every other device in the cycle timed out. The end-to-end run found this, and a
+regression test now covers it.
+
 ## MongoDB indexes
 | Collection | Index | Why |
 |---|---|---|
-| devices | `mgmt_ip` unique | one record per managed device |
-| ip_addresses | `ip_key` unique | the database itself refuses a duplicate IP record |
+| devices | `mgmt_ip` unique, `status`, `(agent_id, mgmt_ip_key)` | one record per managed device; status filters; known-devices list |
+| interfaces | `(device_id, if_index)` unique | one row per interface |
+| ip_addresses | `ip_key` unique, `mac` | the database itself refuses a duplicate IP record; IP-by-MAC lookups |
+| arp_entries | `(ip_key, mac, device_id)` unique, `mac`, `last_seen` | duplicate-IP detection, newest first |
 | subnets | `network` unique | no duplicate subnets |
 | alerts | `key` unique | the same alert is updated, not re-created |
 | users | `username` unique | |

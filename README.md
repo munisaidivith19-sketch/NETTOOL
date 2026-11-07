@@ -4,9 +4,12 @@ AI-assisted network mapping, IP address management and monitoring for small and 
 organizations (colleges, hospitals, SMEs). See `CLAUDE.md` for the full brief and security rules,
 and `PHASE_PROMPTS.md` for the build plan.
 
-**Status: Phase 1 done.** The backend has accounts, roles, sessions, CSRF protection, an audit
-log and HMAC-signed agent authentication (see `docs/auth-design.md`). The dashboard UI comes in
-Phase 4; until then use the API (`/docs` in development).
+**Status: Phase 2 done.** The backend has accounts, roles, sessions, CSRF protection, an audit
+log and HMAC-signed agent authentication (see `docs/auth-design.md`). The agent discovers the
+network: it pings ranges, polls devices over SNMPv3 (system info, interfaces, IPv4/IPv6
+addresses, ARP and IPv6 neighbours), detects the vendor and sends a signed report that the
+backend stores. A simulated five-device campus lets you run all of it without any hardware.
+The dashboard UI comes in Phase 4; until then use the API (`/docs` in development).
 
 ```
 agent/     runs inside the private network; discovers and polls devices (Python)
@@ -51,7 +54,8 @@ Main API routes:
 - `/api/auth/login`, `/logout`, `/me`, `/change-password`
 - `/api/users` and `/api/agents` (admin)
 - `/api/audit` (admin)
-- `/api/agent/heartbeat` (signed agent requests)
+- `/api/agent/heartbeat`, `/api/agent/report`, `/api/agent/known-devices` (signed agent
+  requests only; a user session is not accepted there)
 
 Open http://127.0.0.1:8000/health. It returns `{"status":"ok","database":"ok"}`, or HTTP 503
 with `"database":"unavailable"` if MongoDB is not reachable. API docs are at `/docs` in
@@ -66,11 +70,52 @@ cd agent
 py -3.10 -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements-dev.txt
-copy .env.example .env
-python -m netmap_agent.main
+copy .env.example .env                  # then edit .env
+python -m netmap_agent.main --once      # one discovery cycle, then exit
+python -m netmap_agent.main             # repeat every POLL_INTERVAL_SECONDS
 ```
-In Phase 0 this only loads and validates settings. Discovery arrives in Phase 2.
-Always start it with `python -m netmap_agent.main` from the `agent` folder.
+Always start it from the `agent` folder. Before the first run:
+1. In the backend, an admin creates an agent: `POST /api/agents` with `{"name": "..."}`. The
+   response contains the agent's `id` and `key`. The key is shown **only once**.
+2. Put them in the agent's `.env` as `AGENT_ID` and `AGENT_KEY`.
+3. Set `SCAN_RANGES`, `SNMP_TARGETS` and the SNMPv3 user and keys.
+
+Each cycle the agent:
+1. asks the backend which devices it already knows
+2. pings the scan ranges and those devices
+3. polls every SNMP target
+4. uploads one signed report
+
+The SNMP credentials stay in the agent's `.env` and are never sent to the backend. The agent
+only talks HTTPS; `http://` is accepted only for `127.0.0.1`/`localhost` when
+`ALLOW_INSECURE_LOCAL=true`.
+
+### Simulated network (no lab needed)
+`agent/simulation/` describes a small campus. Each device listens on its own loopback address,
+port 1161:
+
+| Device | Address | Vendor |
+|---|---|---|
+| EDGE-RTR-1 | 127.0.0.11 | Cisco router |
+| CORE-SW-1 | 127.0.0.12 | Cisco layer-3 switch |
+| ACCESS-SW-1 | 127.0.0.13 | HP switch |
+| ACCESS-SW-2 | 127.0.0.14 | MikroTik switch |
+| AP-1-LIBRARY | 127.0.0.15 | Aruba access point |
+
+It has staff, lab and printer VLANs, IPv6 on two of them, and about 30 ARP/neighbour entries.
+The devices are [snmpsim](https://github.com/lextudio/snmpsim) responders speaking SNMPv3
+authPriv (SHA + AES).
+```powershell
+cd agent
+python -m simulation.run_simulation        # terminal 1: starts all five, Ctrl+C stops them
+python -m netmap_agent.main --once         # terminal 2, with the simulation block of
+                                           # .env.example copied into .env
+```
+To run only some devices, name them: `python -m simulation.run_simulation core-switch ap-1`.
+A device that stops answering SNMP shows as `snmp_error` on the next cycle, because its
+loopback address still answers ping. On a real network a powered-off device shows as `down`.
+The data files in `simulation/data/` are generated from `simulation/topology.py` by
+`python -m simulation.build_snmprec`; a test checks that the committed files match.
 
 ## 4. Frontend
 ```powershell
@@ -84,8 +129,10 @@ Run the backend at the same time. The Overview page shows backend and database s
 | Part | Command (inside the folder, venv active) |
 |---|---|
 | Backend | `pytest` · `ruff check .` · `bandit -r app` · `pip-audit -r requirements.txt` |
-| Agent | `pytest` · `ruff check .` · `bandit -r netmap_agent` · `pip-audit -r requirements.txt` |
+| Agent | `pytest` · `ruff check .` · `bandit -r netmap_agent simulation` · `pip-audit -r requirements.txt` |
 | Frontend | `npm test` · `npm run build` · `npm audit` |
 
 Backend tests need the local MongoDB running. They use a separate `netmap_test` database that
-they wipe, never `netmap`. Point them elsewhere with the `NETMAP_TEST_MONGODB_URI` env var.
+they wipe, never `netmap`. Point them elsewhere with the `NETMAP_TEST_MONGODB_URI` env var. The agent's simulation tests
+start a real snmpsim responder on 127.0.0.21; they are skipped, with the reason shown, if
+snmpsim is not installed.

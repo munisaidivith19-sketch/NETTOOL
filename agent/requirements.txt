@@ -1,6 +1,8 @@
 # Agent runtime dependencies, pinned. Python 3.10: pydantic-settings held at the last 3.10 release.
 # Netmiko + ciscoconfparse2 are added in Phase 6; scikit-learn + Prophet in Phase 7.
 pysnmp==7.1.31
+# Needed by pysnmp for SNMPv3 privacy (AES); also used for the credential store in Phase 6.
+cryptography==50.0.2
 httpx==0.28.1
 pydantic==2.14.3
 pydantic-settings==2.15.0
