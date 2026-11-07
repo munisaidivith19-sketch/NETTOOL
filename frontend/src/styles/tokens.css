@@ -1,0 +1,77 @@
+/*
+ * NetMap design tokens. Components use these variables only, never raw hex values.
+ * Concept: a patch panel. Calm, cool neutrals, so the status colours are the only loud thing.
+ * Every text colour below passes WCAG 4.5:1 contrast on both --surface and --panel.
+ */
+:root {
+  color-scheme: light;
+
+  --surface: #f3f5f6;
+  --panel: #ffffff;
+  --panel-sunken: #e9edf0;
+  --ink: #1a232d;
+  --muted: #5a6672;
+  --line: #d3dae0;
+  --accent: #1d5db8; /* Cat6 patch-cable blue */
+  --on-accent: #ffffff;
+
+  --up: #1b7f47;
+  --down: #c02626;
+  --warn: #93600f;
+
+  --font-ui: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
+  --font-addr: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", monospace;
+
+  /* Type scale: minor third (1.2), 16px base */
+  --text-sm: 0.833rem;
+  --text-base: 1rem;
+  --text-md: 1.2rem;
+  --text-lg: 1.44rem;
+  --text-xl: 1.728rem;
+
+  /* Dense dashboard spacing, 4px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  --radius-sm: 3px; /* controls */
+  --radius-md: 6px; /* panels */
+
+  --sidebar-width: 232px;
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface: #11181f;
+    --panel: #17212a;
+    --panel-sunken: #0d1318;
+    --ink: #e2e8ee;
+    --muted: #9aa7b3;
+    --line: #2a3742;
+    --accent: #74a6ee;
+    --on-accent: #11181f;
+    --up: #4cc38a;
+    --down: #f07068;
+    --warn: #e3b04f;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #11181f;
+  --panel: #17212a;
+  --panel-sunken: #0d1318;
+  --ink: #e2e8ee;
+  --muted: #9aa7b3;
+  --line: #2a3742;
+  --accent: #74a6ee;
+  --on-accent: #11181f;
+  --up: #4cc38a;
+  --down: #f07068;
+  --warn: #e3b04f;
+}

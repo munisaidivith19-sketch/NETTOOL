@@ -1,0 +1,110 @@
+/* Status mark: the shape carries meaning, the colour reinforces it. */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.status-shape {
+  flex: none;
+}
+
+.status-up .status-shape {
+  color: var(--up);
+}
+
+.status-down .status-shape {
+  color: var(--down);
+}
+
+.status-warning .status-shape {
+  color: var(--warn);
+}
+
+.status-unknown .status-shape {
+  color: var(--muted);
+}
+
+.status-unknown .status-label {
+  color: var(--muted);
+}
+
+.button {
+  min-height: 40px;
+  padding: var(--space-2) var(--space-4);
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: color-mix(in srgb, var(--accent) 88%, var(--ink));
+}
+
+.button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+/* Health panel on the overview page */
+.health {
+  max-width: 640px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.health-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.health-head h2 {
+  font-size: var(--text-md);
+}
+
+.health-rows {
+  margin: 0;
+}
+
+.health-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 52px;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.health-row dt {
+  font-weight: 500;
+}
+
+.health-row dd {
+  margin: 0;
+}
+
+.health-foot,
+.health-hint {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.health-hint {
+  color: var(--ink);
+  background: var(--panel-sunken);
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  max-width: 72ch;
+}

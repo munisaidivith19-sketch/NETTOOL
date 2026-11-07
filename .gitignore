@@ -1,0 +1,27 @@
+# Secrets - never commit. Only .env.example files belong in git.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+agent/credentials*
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node / Vite
+node_modules/
+dist/
+frontend/.vite/
+
+# Logs and OS files
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

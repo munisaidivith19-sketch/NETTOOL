@@ -1,0 +1,8 @@
+# Development and security tooling (not installed on Render).
+-r requirements.txt
+# 9.2.0 crashes on Python 3.10.0 (frozen+slots dataclass bug in that early 3.10 release)
+pytest==9.1.1
+pytest-asyncio==1.4.1.post1
+ruff==0.17.4
+bandit==1.9.4
+pip-audit==2.10.1
