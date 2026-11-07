@@ -31,6 +31,31 @@ class InterfaceOut(BaseModel):
     mac: str | None = None
     admin_status: str | None = None
     oper_status: str | None = None
+    # Latest traffic rates from the last two counter readings (services/metrics.py).
+    rates: dict | None = None
+
+
+class LinkOut(BaseModel):
+    """An LLDP/CDP neighbour on one of this device's ports."""
+
+    protocol: str
+    if_index: int | None = None
+    local_port: str | None = None
+    remote_name: str | None = None
+    remote_port: str | None = None
+    remote_mgmt_ip: str | None = None
+    remote_platform: str | None = None
+    remote_device_id: str | None = None  # set when the neighbour is a NetMap device
+    status: str  # active | lost
+    last_seen: datetime
+
+
+class MetricPoint(BaseModel):
+    ts: datetime
+    in_bps: int | None = None
+    out_bps: int | None = None
+    in_errors: int | None = None
+    out_errors: int | None = None
 
 
 class DeviceDetail(DeviceOut):
@@ -42,6 +67,7 @@ class DeviceDetail(DeviceOut):
     agent_id: str | None = None
     interfaces: list[InterfaceOut]
     addresses: list[IpRow]
+    links: list[LinkOut] = []
 
 
 class SubnetSummary(BaseModel):

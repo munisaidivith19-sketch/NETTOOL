@@ -15,7 +15,9 @@ MIN_BCRYPT_ROUNDS = 12
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # env_ignore_empty: "TELEGRAM_CHAT_ID=" in .env means "not set", not an invalid empty value.
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore",
+                                      env_ignore_empty=True)
 
     env: Literal["development", "test", "production"] = "development"
     # SecretStr: an Atlas URI contains a password, so it must never show up in logs or reprs.
@@ -40,6 +42,28 @@ class Settings(BaseSettings):
     duplicate_ip_window_minutes: int = Field(default=60, ge=5, le=10080)
     subnet_usage_alert_percent: int = Field(default=80, ge=50, le=100)
 
+    # Monitoring (Phase 5). New-MAC alerts start this many hours after the first MAC table
+    # arrives; until then every MAC counts as part of the existing network.
+    new_mac_learning_hours: int = Field(default=24, ge=0, le=24 * 30)
+
+    # Notifications (Phase 5), sent by the backend. A channel with missing settings is off.
+    notify_min_severity: Literal["info", "warning", "critical"] = "warning"
+    telegram_bot_token: SecretStr | None = None
+    telegram_chat_id: str | None = Field(default=None,
+                                         pattern=r"^(-?[0-9]{1,20}|@[A-Za-z0-9_]{5,32})$")
+    # Only changed for tests or a local stand-in; must be https (or http on localhost).
+    telegram_api_base: str = Field(default="https://api.telegram.org", max_length=200)
+    smtp_host: str | None = Field(default=None, pattern=r"^[A-Za-z0-9.-]{1,253}$")
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_security: Literal["starttls", "ssl"] = "starttls"  # plain SMTP is not offered
+    smtp_username: str | None = Field(default=None, max_length=254)
+    smtp_password: SecretStr | None = None
+    smtp_from: str | None = Field(default=None, pattern=r"^[^@\s,;<>]{1,64}@[A-Za-z0-9.-]{1,253}$")
+    # Comma-separated list of recipients.
+    smtp_to: str | None = Field(default=None, max_length=1000,
+                                pattern=r"^[^@\s,;<>]{1,64}@[A-Za-z0-9.-]{1,253}"
+                                        r"(\s*,\s*[^@\s,;<>]{1,64}@[A-Za-z0-9.-]{1,253})*$")
+
     # The built React app (npm run build), served from the same origin as the API. None, or a
     # folder without index.html, means API only (in development Vite serves the UI instead).
     frontend_dist: Path | None = Path(__file__).resolve().parents[2] / "frontend" / "dist"
@@ -50,6 +74,16 @@ class Settings(BaseSettings):
         # stolen password hashes much faster to crack, so they are refused.
         if self.env != "test" and self.bcrypt_rounds < MIN_BCRYPT_ROUNDS:
             raise ValueError(f"BCRYPT_ROUNDS must be at least {MIN_BCRYPT_ROUNDS}")
+        return self
+
+    @model_validator(mode="after")
+    def check_telegram_api_base(self) -> "Settings":
+        # The bot token is part of the request URL, so it must never travel over plain HTTP to
+        # another machine.
+        base = self.telegram_api_base
+        local = base.startswith(("http://127.0.0.1:", "http://localhost:"))
+        if not (base.startswith("https://") or local) or any(c in base for c in "?#@ "):
+            raise ValueError("TELEGRAM_API_BASE must be an https:// URL")
         return self
 
     @property

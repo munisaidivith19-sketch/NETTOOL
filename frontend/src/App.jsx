@@ -1,11 +1,13 @@
+import { lazy, Suspense } from "react";
 import { Link, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthProvider.jsx";
 import { can } from "./auth/permissions.js";
 import Layout from "./components/Layout.jsx";
 import { SummaryProvider } from "./components/SummaryProvider.jsx";
-import { PageHead } from "./components/ui.jsx";
+import { Loading, PageHead } from "./components/ui.jsx";
 import Agents from "./pages/admin/Agents.jsx";
 import AuditLog from "./pages/admin/AuditLog.jsx";
+import Notifications from "./pages/admin/Notifications.jsx";
 import Users from "./pages/admin/Users.jsx";
 import Alerts from "./pages/Alerts.jsx";
 import ChangePassword from "./pages/ChangePassword.jsx";
@@ -17,6 +19,9 @@ import IpSearch from "./pages/IpSearch.jsx";
 import Login from "./pages/Login.jsx";
 import SubnetDetail from "./pages/SubnetDetail.jsx";
 import Subnets from "./pages/Subnets.jsx";
+
+// The map library (Cytoscape.js) is large, so the topology page loads only when opened.
+const Topology = lazy(() => import("./pages/Topology.jsx"));
 
 function NotFound() {
   return (
@@ -70,10 +75,19 @@ export default function App() {
           <Route path="ip/subnets/:id" element={<SubnetDetail />} />
           <Route path="ip/address/:ip" element={<IpDetail />} />
           <Route path="alerts" element={<Alerts />} />
+          <Route
+            path="topology"
+            element={
+              <Suspense fallback={<Loading />}>
+                <Topology />
+              </Suspense>
+            }
+          />
           <Route path="account/password" element={<ChangePassword />} />
           <Route path="admin/users" element={<RequireAdmin><Users /></RequireAdmin>} />
           <Route path="admin/agents" element={<RequireAdmin><Agents /></RequireAdmin>} />
           <Route path="admin/audit" element={<RequireAdmin><AuditLog /></RequireAdmin>} />
+          <Route path="admin/notifications" element={<RequireAdmin><Notifications /></RequireAdmin>} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

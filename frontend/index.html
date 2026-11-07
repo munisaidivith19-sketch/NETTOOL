@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>NetMap</title>
+    <!--
+      Cytoscape.js (topology map) normally injects an inline <style> tag, which our
+      Content-Security-Policy (style-src 'self') blocks. It skips the injection when an element
+      with this id exists; the one rule it wanted (position: relative) is in styles/pages.css.
+    -->
+    <meta name="netmap-cytoscape-style" content="in pages.css" id="__________cytoscape_stylesheet" />
   </head>
   <body>
     <div id="root"></div>

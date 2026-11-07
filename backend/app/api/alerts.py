@@ -75,6 +75,12 @@ async def acknowledge(
 async def resolve(
     request: Request, alert_id: ObjectIdPath, user: CurrentUser = Depends(require_engineer)
 ) -> AlertOut:
-    return await _act(request, alert_id, user, "alert.resolve",
-                      {"status": "resolved", "resolved_at": utcnow(),
-                       "resolved_by": user.username})
+    now = utcnow()
+    alert = await _act(request, alert_id, user, "alert.resolve",
+                       {"status": "resolved", "resolved_at": now, "resolved_by": user.username})
+    if alert.type == "new_mac" and alert.target.get("mac"):
+        # Resolving a new-device alert means "I know this device": record who approved it.
+        await request.app.state.db.mac_addresses.update_one(
+            {"mac": alert.target["mac"]},
+            {"$set": {"known_by": user.username, "known_at": now}})
+    return alert

@@ -9,6 +9,7 @@ import ipaddress
 import logging
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from pysnmp.hlapi.v3arch.asyncio import (
     CommunityData,
@@ -79,6 +80,38 @@ class Neighbor:
 
 
 @dataclass
+class Link:
+    """A directly connected neighbour seen with LLDP or CDP on one local port."""
+
+    protocol: str  # "lldp" | "cdp"
+    if_index: int | None  # local port; None when an LLDP port number can't be mapped
+    local_port: str | None = None
+    remote_name: str | None = None
+    remote_port: str | None = None
+    remote_port_descr: str | None = None
+    remote_chassis_id: str | None = None
+    remote_mgmt_ip: str | None = None
+    remote_platform: str | None = None
+
+
+@dataclass
+class MacEntry:
+    mac: str
+    if_index: int
+    vlan: int | None  # None when the switch only has the VLAN-unaware BRIDGE-MIB table
+
+
+@dataclass
+class Counter:
+    if_index: int
+    in_octets: int | None = None
+    out_octets: int | None = None
+    in_errors: int | None = None
+    out_errors: int | None = None
+    bits: int = 64  # 32 when only the old ifInOctets/ifOutOctets exist (they wrap after 4 GB)
+
+
+@dataclass
 class DevicePoll:
     target: str
     port: int
@@ -93,6 +126,10 @@ class DevicePoll:
     interfaces: list[Interface] = field(default_factory=list)
     addresses: list[Address] = field(default_factory=list)
     neighbors: list[Neighbor] = field(default_factory=list)
+    links: list[Link] = field(default_factory=list)
+    mac_table: list[MacEntry] = field(default_factory=list)
+    counters: list[Counter] = field(default_factory=list)
+    counters_at: datetime | None = None  # when the counters were read; rates need exact times
 
 
 class SnmpError(Exception):
@@ -204,6 +241,10 @@ class SnmpClient:
             result.interfaces = await self._interfaces(transport)
             result.addresses = await self._addresses(transport)
             result.neighbors = await self._neighbors(transport)
+            result.links = await self._links(transport, result.interfaces)
+            result.mac_table = await self._mac_table(transport)
+            result.counters_at = datetime.now(timezone.utc)
+            result.counters = await self._counters(transport)
             result.ok = True
         except SnmpError as exc:
             result.error = str(exc)[:200]
@@ -312,6 +353,174 @@ class SnmpClient:
                 if mac and kind != "invalid":
                     neighbors[(ip, if_index)] = Neighbor(ip, 4, mac, if_index, kind)
         return list(neighbors.values())
+
+    async def _links(self, transport, interfaces: list[Interface]) -> list[Link]:
+        links = await self._lldp(transport, interfaces) + await self._cdp(transport)
+        names = {i.if_index: i.name or i.descr for i in interfaces}
+        for link in links:
+            if link.local_port is None and link.if_index is not None:
+                link.local_port = names.get(link.if_index)
+        return links
+
+    async def _lldp(self, transport, interfaces: list[Interface]) -> list[Link]:
+        names = await self._column(transport, oids.LLDP_REM_SYS_NAME)
+        chassis = await self._column(transport, oids.LLDP_REM_CHASSIS_ID)
+        if not names and not chassis:
+            return []  # LLDP not enabled (or not supported): skip the other columns
+        chassis_types = await self._column(transport, oids.LLDP_REM_CHASSIS_SUBTYPE)
+        port_ids = await self._column(transport, oids.LLDP_REM_PORT_ID)
+        port_types = await self._column(transport, oids.LLDP_REM_PORT_SUBTYPE)
+        port_descrs = await self._column(transport, oids.LLDP_REM_PORT_DESC)
+        local_ports = await self._lldp_local_ports(transport, interfaces)
+
+        mgmt_ips: dict[tuple[int, int], str] = {}
+        for index in await self._column(transport, oids.LLDP_REM_MAN_ADDR_IF_SUBTYPE):
+            try:
+                port_num, rem_index, address = oids.parse_lldp_man_addr_index(index)
+            except (oids.OidIndexError, ValueError):
+                continue
+            # Prefer an IPv4 address when a neighbour announces both.
+            known = mgmt_ips.get((port_num, rem_index))
+            if known is None or ":" in known:
+                mgmt_ips[(port_num, rem_index)] = address
+
+        links = []
+        for index in sorted(set(names) | set(chassis)):
+            try:
+                port_num, rem_index = oids.parse_lldp_rem_index(index)
+            except oids.OidIndexError:
+                continue
+            raw_chassis = chassis.get(index)
+            raw_port = port_ids.get(index)
+            if_index, local_name = local_ports.get(port_num, (None, None))
+            links.append(Link(
+                protocol="lldp",
+                if_index=if_index,
+                local_port=local_name,
+                remote_name=_text(names.get(index)),
+                remote_port=oids.lldp_port_id(_int(port_types.get(index)), raw_port.asOctets())
+                if raw_port is not None else None,
+                remote_port_descr=_text(port_descrs.get(index)),
+                remote_chassis_id=oids.lldp_chassis_id(
+                    _int(chassis_types.get(index)), raw_chassis.asOctets())
+                if raw_chassis is not None else None,
+                remote_mgmt_ip=mgmt_ips.get((port_num, rem_index)),
+            ))
+        return links
+
+    async def _lldp_local_ports(self, transport, interfaces: list[Interface]
+                                ) -> dict[int, tuple[int | None, str | None]]:
+        """LLDP numbers local ports its own way. Map each lldpLocPortNum to an ifIndex.
+
+        lldpLocPortId usually holds the interface name and lldpLocPortDesc its description, so
+        match those against ifName / ifDescr. If nothing matches, many devices simply use the
+        ifIndex as the port number, so accept that when such an interface exists.
+        """
+        by_name: dict[str, Interface] = {}
+        for iface in interfaces:
+            for text in (iface.name, iface.descr):
+                if text:
+                    by_name.setdefault(text.lower(), iface)
+        by_index = {i.if_index: i for i in interfaces}
+        port_ids = await self._column(transport, oids.LLDP_LOC_PORT_ID)
+        port_descrs = await self._column(transport, oids.LLDP_LOC_PORT_DESC)
+        mapping: dict[int, tuple[int | None, str | None]] = {}
+        for key in set(port_ids) | set(port_descrs):
+            if len(key) != 1:
+                continue
+            texts = [_text(port_ids.get(key)), _text(port_descrs.get(key))]
+            match = next((by_name[t.lower()] for t in texts if t and t.lower() in by_name),
+                         None) or by_index.get(key[0])
+            if match:
+                mapping[key[0]] = (match.if_index, match.name or match.descr)
+            else:
+                mapping[key[0]] = (None, texts[0] or texts[1])
+        for if_index, iface in by_index.items():  # devices without a lldpLocPortTable
+            mapping.setdefault(if_index, (if_index, iface.name or iface.descr))
+        return mapping
+
+    async def _cdp(self, transport) -> list[Link]:
+        device_ids = await self._column(transport, oids.CDP_CACHE_DEVICE_ID)
+        if not device_ids:
+            return []
+        ports = await self._column(transport, oids.CDP_CACHE_DEVICE_PORT)
+        platforms = await self._column(transport, oids.CDP_CACHE_PLATFORM)
+        addresses = await self._column(transport, oids.CDP_CACHE_ADDRESS)
+        address_types = await self._column(transport, oids.CDP_CACHE_ADDRESS_TYPE)
+        links = []
+        for index in sorted(device_ids):
+            try:
+                if_index, _ = oids.parse_cdp_index(index)
+            except oids.OidIndexError:
+                continue
+            raw_address = addresses.get(index)
+            links.append(Link(
+                protocol="cdp",
+                if_index=if_index if if_index >= 1 else None,
+                remote_name=_text(device_ids.get(index)),
+                remote_port=_text(ports.get(index)),
+                remote_platform=_text(platforms.get(index)),
+                remote_mgmt_ip=oids.cdp_address(_int(address_types.get(index)),
+                                                raw_address.asOctets())
+                if raw_address is not None else None,
+            ))
+        return links
+
+    async def _mac_table(self, transport) -> list[MacEntry]:
+        """The switch forwarding table: which MAC was learned on which port (and VLAN)."""
+        base_ports = await self._column(transport, oids.DOT1D_BASE_PORT_IFINDEX)
+        port_if_index = {key[0]: _int(value) for key, value in base_ports.items() if len(key) == 1}
+        entries: dict[tuple[str, int, int | None], MacEntry] = {}
+
+        def add(mac: str, bridge_port, status, vlan: int | None) -> None:
+            if oids.FDB_STATUS.get(_int(status), "learned") in ("self", "invalid", "mgmt"):
+                return  # the switch's own MACs and dead rows say nothing about endpoints
+            port = _int(bridge_port)
+            if not port:
+                return  # port 0 = learned but not on a known port
+            if_index = port_if_index.get(port) or port  # no dot1dBasePortTable: assume equal
+            entries[(mac, if_index, vlan)] = MacEntry(mac, if_index, vlan)
+
+        q_ports = await self._column(transport, oids.DOT1Q_TP_FDB_PORT)
+        if q_ports:
+            q_status = await self._column(transport, oids.DOT1Q_TP_FDB_STATUS)
+            for index, port in q_ports.items():
+                try:
+                    vlan, mac = oids.parse_qbridge_fdb_index(index)
+                except oids.OidIndexError:
+                    continue
+                add(mac, port, q_status.get(index), vlan or None)
+        else:
+            status = await self._column(transport, oids.DOT1D_TP_FDB_STATUS)
+            for index, port in (await self._column(transport, oids.DOT1D_TP_FDB_PORT)).items():
+                try:
+                    mac = oids.parse_mac_index(index)
+                except oids.OidIndexError:
+                    continue
+                add(mac, port, status.get(index), None)
+        return list(entries.values())
+
+    async def _counters(self, transport) -> list[Counter]:
+        bits = 64
+        in_octets = await self._column(transport, oids.IF_HC_IN_OCTETS)
+        if in_octets:
+            out_octets = await self._column(transport, oids.IF_HC_OUT_OCTETS)
+        else:
+            bits = 32
+            in_octets = await self._column(transport, oids.IF_IN_OCTETS)
+            out_octets = await self._column(transport, oids.IF_OUT_OCTETS)
+        in_errors = await self._column(transport, oids.IF_IN_ERRORS)
+        out_errors = await self._column(transport, oids.IF_OUT_ERRORS)
+        indexes = {key[0] for col in (in_octets, out_octets, in_errors, out_errors)
+                   for key in col if len(key) == 1}
+        return [Counter(
+            if_index=i,
+            in_octets=_int(in_octets.get((i,))),
+            out_octets=_int(out_octets.get((i,))),
+            in_errors=_int(in_errors.get((i,))),
+            out_errors=_int(out_errors.get((i,))),
+            bits=bits,
+        ) for i in sorted(indexes) if i >= 1]
 
 
 async def poll_all(settings: AgentSettings, targets: list[tuple[str, int]]) -> list[DevicePoll]:

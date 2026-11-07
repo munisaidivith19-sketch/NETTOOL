@@ -147,3 +147,134 @@ def parse_net_to_media_index(oid: str, column: str) -> tuple[int, str]:
     if len(index) != 5:
         raise OidIndexError("ipNetToMedia index must be ifIndex + 4 octets")
     return index[0], parse_ipv4_index(index[1:])
+
+
+# ---- Phase 5: neighbours (LLDP, CDP), MAC tables (BRIDGE / Q-BRIDGE), traffic counters -------
+
+# LLDP-MIB (IEEE 802.1AB) lldpRemTable. Index = timeMark.localPortNum.remIndex
+LLDP_REM_CHASSIS_SUBTYPE = "1.0.8802.1.1.2.1.4.1.1.4"
+LLDP_REM_CHASSIS_ID = "1.0.8802.1.1.2.1.4.1.1.5"
+LLDP_REM_PORT_SUBTYPE = "1.0.8802.1.1.2.1.4.1.1.6"
+LLDP_REM_PORT_ID = "1.0.8802.1.1.2.1.4.1.1.7"
+LLDP_REM_PORT_DESC = "1.0.8802.1.1.2.1.4.1.1.8"
+LLDP_REM_SYS_NAME = "1.0.8802.1.1.2.1.4.1.1.9"
+# lldpRemManAddrTable. Index = timeMark.localPortNum.remIndex.addrSubtype.addrLen.addr
+LLDP_REM_MAN_ADDR_IF_SUBTYPE = "1.0.8802.1.1.2.1.4.2.1.3"
+# lldpLocPortTable. Index = localPortNum (not always the ifIndex)
+LLDP_LOC_PORT_ID = "1.0.8802.1.1.2.1.3.7.1.3"
+LLDP_LOC_PORT_DESC = "1.0.8802.1.1.2.1.3.7.1.4"
+
+# CISCO-CDP-MIB cdpCacheTable. Index = ifIndex.deviceIndex
+CDP_CACHE_ADDRESS_TYPE = "1.3.6.1.4.1.9.9.23.1.2.1.1.3"  # 1 = ip
+CDP_CACHE_ADDRESS = "1.3.6.1.4.1.9.9.23.1.2.1.1.4"
+CDP_CACHE_DEVICE_ID = "1.3.6.1.4.1.9.9.23.1.2.1.1.6"
+CDP_CACHE_DEVICE_PORT = "1.3.6.1.4.1.9.9.23.1.2.1.1.7"
+CDP_CACHE_PLATFORM = "1.3.6.1.4.1.9.9.23.1.2.1.1.8"
+
+# BRIDGE-MIB: bridge port number -> ifIndex, and the VLAN-unaware forwarding table
+DOT1D_BASE_PORT_IFINDEX = "1.3.6.1.2.1.17.1.4.1.2"  # index = bridge port
+DOT1D_TP_FDB_PORT = "1.3.6.1.2.1.17.4.3.1.2"  # index = 6 MAC octets
+DOT1D_TP_FDB_STATUS = "1.3.6.1.2.1.17.4.3.1.3"
+# Q-BRIDGE-MIB: VLAN-aware forwarding table. Index = fdbId.mac (fdbId is the VLAN on most
+# switches, which use one forwarding database per VLAN)
+DOT1Q_TP_FDB_PORT = "1.3.6.1.2.1.17.7.1.2.2.1.2"
+DOT1Q_TP_FDB_STATUS = "1.3.6.1.2.1.17.7.1.2.2.1.3"
+FDB_STATUS = {1: "other", 2: "invalid", 3: "learned", 4: "self", 5: "mgmt"}
+
+# IF-MIB traffic counters. HC = 64-bit (ifXTable); the 32-bit ones wrap after 4 GB.
+IF_HC_IN_OCTETS = "1.3.6.1.2.1.31.1.1.1.6"
+IF_HC_OUT_OCTETS = "1.3.6.1.2.1.31.1.1.1.10"
+IF_IN_OCTETS = "1.3.6.1.2.1.2.2.1.10"
+IF_OUT_OCTETS = "1.3.6.1.2.1.2.2.1.16"
+IF_IN_ERRORS = "1.3.6.1.2.1.2.2.1.14"
+IF_OUT_ERRORS = "1.3.6.1.2.1.2.2.1.20"
+
+# LldpChassisIdSubtype / LldpPortIdSubtype values that hold a MAC or a network address
+_CHASSIS_MAC, _CHASSIS_NETWORK = 4, 5
+_PORT_MAC, _PORT_NETWORK = 3, 4
+# IANA AddressFamilyNumbers, used by LLDP management addresses
+_FAMILY_IPV4, _FAMILY_IPV6 = 1, 2
+
+
+def parse_lldp_rem_index(index: tuple[int, ...]) -> tuple[int, int]:
+    """lldpRemTable index → (localPortNum, remIndex). The timeMark is ignored."""
+    if len(index) != 3:
+        raise OidIndexError("lldpRemTable index must be timeMark.localPortNum.remIndex")
+    return index[1], index[2]
+
+
+def parse_lldp_man_addr_index(index: tuple[int, ...]) -> tuple[int, int, str]:
+    """lldpRemManAddrTable index → (localPortNum, remIndex, management IP)."""
+    if len(index) < 5:
+        raise OidIndexError("index too short")
+    family, length = index[3], index[4]
+    raw = index[5:]
+    if len(raw) != length:
+        raise OidIndexError("address length doesn't match")
+    if family == _FAMILY_IPV4 and length == 4:
+        address = str(ipaddress.IPv4Address(_octets(raw)))
+    elif family == _FAMILY_IPV6 and length == 16:
+        address = str(ipaddress.IPv6Address(_octets(raw)))
+    else:
+        raise OidIndexError(f"unsupported management address family {family}")
+    return index[1], index[2], address
+
+
+def parse_mac_index(index: tuple[int, ...]) -> str:
+    """A MAC address encoded as 6 sub-ids (dot1dTpFdbTable index)."""
+    if len(index) != 6:
+        raise OidIndexError("MAC index must have 6 octets")
+    return ":".join(f"{b:02x}" for b in _octets(index))
+
+
+def parse_qbridge_fdb_index(index: tuple[int, ...]) -> tuple[int, str]:
+    """dot1qTpFdbTable index → (fdbId, MAC)."""
+    if len(index) != 7:
+        raise OidIndexError("dot1qTpFdb index must be fdbId + 6 MAC octets")
+    return index[0], parse_mac_index(index[1:])
+
+
+def parse_cdp_index(index: tuple[int, ...]) -> tuple[int, int]:
+    """cdpCacheTable index → (ifIndex, deviceIndex)."""
+    if len(index) != 2:
+        raise OidIndexError("cdpCache index must be ifIndex.deviceIndex")
+    return index[0], index[1]
+
+
+def _printable(raw: bytes) -> str | None:
+    text = raw.decode("utf-8", errors="replace")
+    text = "".join(ch if ch.isprintable() else " " for ch in text).strip()
+    return text[:255] or None
+
+
+def _network_address(raw: bytes) -> str | None:
+    """IANA family byte + address bytes (LLDP 'networkAddress' subtype)."""
+    if len(raw) == 5 and raw[0] == _FAMILY_IPV4:
+        return str(ipaddress.IPv4Address(raw[1:]))
+    if len(raw) == 17 and raw[0] == _FAMILY_IPV6:
+        return str(ipaddress.IPv6Address(raw[1:]))
+    return None
+
+
+def lldp_chassis_id(subtype: int | None, raw: bytes) -> str | None:
+    """Render an LLDP chassis ID: a MAC as aa:bb:.., an address as text, anything else as text."""
+    if subtype == _CHASSIS_MAC and len(raw) == 6:
+        return ":".join(f"{b:02x}" for b in raw)
+    if subtype == _CHASSIS_NETWORK:
+        return _network_address(raw) or raw.hex()
+    return _printable(raw)
+
+
+def lldp_port_id(subtype: int | None, raw: bytes) -> str | None:
+    if subtype == _PORT_MAC and len(raw) == 6:
+        return ":".join(f"{b:02x}" for b in raw)
+    if subtype == _PORT_NETWORK:
+        return _network_address(raw) or raw.hex()
+    return _printable(raw)
+
+
+def cdp_address(address_type: int | None, raw: bytes) -> str | None:
+    """cdpCacheAddress: 4 bytes for IPv4 when cdpCacheAddressType is ip(1)."""
+    if address_type == 1 and len(raw) == 4:
+        return str(ipaddress.IPv4Address(raw))
+    return None

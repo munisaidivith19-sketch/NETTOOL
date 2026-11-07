@@ -20,7 +20,11 @@ MAX_INTERFACES = 2048
 MAX_ADDRESSES = 8192
 MAX_NEIGHBORS = 20000
 MAX_PING = 8192
+MAX_LINKS = 4096
+MAX_MAC_ENTRIES = 20000
 INT32 = 2**31 - 1
+COUNTER32_MAX = 2**32 - 1
+COUNTER64_MAX = 2**64 - 1
 
 
 def _clean(text: str) -> str:
@@ -72,6 +76,46 @@ class ReportNeighbor(StrictModel):
     kind: NeighborKind = "other"
 
 
+class ReportLink(StrictModel):
+    """A neighbour the device sees with LLDP or CDP. All of it is the neighbour's own claim."""
+
+    protocol: Literal["lldp", "cdp"]
+    if_index: IfIndex | None = None
+    local_port: DeviceText(256) | None = None
+    remote_name: DeviceText(255) | None = None
+    remote_port: DeviceText(255) | None = None
+    remote_port_descr: DeviceText(255) | None = None
+    remote_chassis_id: DeviceText(255) | None = None
+    remote_mgmt_ip: IPvAnyAddress | None = None
+    remote_platform: DeviceText(255) | None = None
+
+
+class ReportMacEntry(StrictModel):
+    mac: Mac
+    if_index: IfIndex
+    vlan: Annotated[int, Field(ge=1, le=INT32)] | None = None
+
+
+Counter64 = Annotated[int, Field(ge=0, le=COUNTER64_MAX)]
+Counter32 = Annotated[int, Field(ge=0, le=COUNTER32_MAX)]
+
+
+class ReportCounter(StrictModel):
+    if_index: IfIndex
+    in_octets: Counter64 | None = None
+    out_octets: Counter64 | None = None
+    in_errors: Counter32 | None = None
+    out_errors: Counter32 | None = None
+    bits: Literal[32, 64] = 64
+
+    @model_validator(mode="after")
+    def fits_counter_size(self) -> "ReportCounter":
+        if self.bits == 32 and any(v is not None and v > COUNTER32_MAX
+                                   for v in (self.in_octets, self.out_octets)):
+            raise ValueError("a 32-bit counter can't be larger than 2^32 - 1")
+        return self
+
+
 class ReportDevice(StrictModel):
     mgmt_ip: IPvAnyAddress
     snmp_port: Annotated[int, Field(ge=1, le=65535)] = 161
@@ -87,6 +131,10 @@ class ReportDevice(StrictModel):
     interfaces: Annotated[list[ReportInterface], Field(max_length=MAX_INTERFACES)] = []
     addresses: Annotated[list[ReportAddress], Field(max_length=MAX_ADDRESSES)] = []
     neighbors: Annotated[list[ReportNeighbor], Field(max_length=MAX_NEIGHBORS)] = []
+    links: Annotated[list[ReportLink], Field(max_length=MAX_LINKS)] = []
+    mac_table: Annotated[list[ReportMacEntry], Field(max_length=MAX_MAC_ENTRIES)] = []
+    counters: Annotated[list[ReportCounter], Field(max_length=MAX_INTERFACES)] = []
+    counters_at: datetime | None = None
 
 
 class PingResult(StrictModel):

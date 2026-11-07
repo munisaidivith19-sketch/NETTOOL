@@ -80,3 +80,29 @@ The agent's runtime dependencies had no known vulnerabilities at Phase 0 or Phas
   OS dark theme. Light mode uses the same tokens as dark, so it should match, but no one has
   looked at it on these pages.
 - **No end-to-end test runs in CI**; the headless browser script lives outside the repo.
+
+## Phase 5 (topology and monitoring)
+- **Uplink detection is a heuristic.** A port counts as an uplink if it has an LLDP/CDP
+  neighbour, more than one VLAN in its MAC table, or more than 10 MACs. An unmanaged desk
+  switch with 11 PCs looks like an uplink (the PCs are then reported as "only seen on uplink
+  ports"), and a trunk to a switch that runs neither LLDP nor CDP and carries one VLAN with
+  few MACs looks like an access port.
+- **Location is only as fresh as the MAC tables.** Switches forget idle MACs after about
+  5 minutes, so a sleeping PC may show its last known port with "not seen in the last
+  24 hours". MAC-table rows older than 7 days are deleted.
+- **Neighbour data is what the neighbour claims.** LLDP/CDP names, ports and addresses are
+  not authenticated; a rogue device can announce any name. Matching prefers the management
+  IP, and names are only used when they are unique.
+- **No "agent offline" or "device down" alert without reports.** Checks run when a report
+  arrives (Render has no scheduler). If the agent itself stops, nothing new is checked; the
+  dashboard's "last agent check-in" tile turns to a warning after 15 minutes.
+- **Notifications for IPAM-triggered alerts wait for the next agent report.** Alerts opened
+  by a manual reservation or subnet change are queued and sent after the next report.
+- **SMTP on Render's free tier** may be blocked for outgoing mail ports; use Telegram there.
+- **Rates need two readings.** The first cycle after start-up or a device reboot shows no
+  rate. A 32-bit counter that wraps more than once between polls can't be corrected (busy
+  1 Gbit/s ports wrap every ~34 s); such readings are dropped when they exceed the port speed.
+- **New-MAC alerts are capped at 50 per report** so a network-wide event can't create
+  thousands of alerts; the rest are recorded as seen without an alert.
+- **No traffic charts yet.** The device page shows the latest rates; the metrics API returns
+  history, and charts are planned with the AI forecasting work in Phase 7.

@@ -1,8 +1,8 @@
 import { Link, useParams } from "react-router-dom";
 import { devices as devicesApi } from "../api/api.js";
 import StatusMark from "../components/StatusMark.jsx";
-import { Empty, ErrorNote, Loading, PageHead, Panel } from "../components/ui.jsx";
-import { formatDateTime, formatUptime, timeAgo } from "../format.js";
+import { Badge, Empty, ErrorNote, Loading, PageHead, Panel } from "../components/ui.jsx";
+import { formatBps, formatDateTime, formatUptime, timeAgo } from "../format.js";
 import { useResource } from "../hooks/useResource.js";
 import { DeviceStatus, V2cBadge } from "./Devices.jsx";
 import { IpStatus } from "./ipParts.jsx";
@@ -79,6 +79,7 @@ export default function DeviceDetail() {
                       <th scope="col">Description</th>
                       <th scope="col">Status</th>
                       <th scope="col">Speed</th>
+                      <th scope="col">Traffic in / out</th>
                       <th scope="col">MAC</th>
                     </tr>
                   </thead>
@@ -95,7 +96,61 @@ export default function DeviceDetail() {
                           />
                         </td>
                         <td>{i.speed_mbps ? `${i.speed_mbps} Mb/s` : "–"}</td>
+                        <td className="num">
+                          {i.rates ? `${formatBps(i.rates.in_bps)} / ${formatBps(i.rates.out_bps)}` : "–"}
+                        </td>
                         <td className="addr">{i.mac ?? "–"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title={`Neighbours (${d.links.length})`}>
+            {d.links.length === 0 ? (
+              <Empty>No LLDP or CDP neighbours reported by this device.</Empty>
+            ) : (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Local port</th>
+                      <th scope="col">Neighbour</th>
+                      <th scope="col">Its port</th>
+                      <th scope="col">Address</th>
+                      <th scope="col">Learned by</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.links.map((l) => (
+                      <tr key={`${l.protocol}-${l.if_index}-${l.remote_name}-${l.remote_port}`}>
+                        <td className="addr">{l.local_port ?? "–"}</td>
+                        <td>
+                          {/* Neighbour names are what the neighbour claims: plain text. */}
+                          {l.remote_device_id ? (
+                            <Link to={`/devices/${l.remote_device_id}`} className="row-link">
+                              {l.remote_name ?? "unnamed device"}
+                            </Link>
+                          ) : (
+                            <>
+                              {l.remote_name ?? "unnamed device"} <Badge>Not managed</Badge>
+                            </>
+                          )}
+                          {l.remote_platform && <span className="muted small"> {l.remote_platform}</span>}
+                        </td>
+                        <td className="addr">{l.remote_port ?? "–"}</td>
+                        <td className="addr">{l.remote_mgmt_ip ?? "–"}</td>
+                        <td>{l.protocol.toUpperCase()}</td>
+                        <td>
+                          {l.status === "active" ? (
+                            <StatusMark status="up" label="Seen now" />
+                          ) : (
+                            <StatusMark status="down" label={`Lost, last seen ${timeAgo(l.last_seen)}`} />
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

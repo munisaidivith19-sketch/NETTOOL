@@ -10,13 +10,14 @@ const NAV = [
   { to: "/devices", label: "Devices" },
   { to: "/ip", label: "IP addresses" },
   { to: "/alerts", label: "Alerts" },
-  { label: "Topology", soon: true }, // Phase 5
+  { to: "/topology", label: "Topology" },
   { label: "Configuration", soon: true }, // Phase 6
 ];
 
 const ADMIN_NAV = [
   { to: "/admin/users", label: "Users" },
   { to: "/admin/agents", label: "Agents" },
+  { to: "/admin/notifications", label: "Notifications" },
   { to: "/admin/audit", label: "Audit log" },
 ];
 

@@ -31,6 +31,10 @@ def device_entry(poll: DevicePoll, snmp_version: str) -> dict:
                        for a in poll.addresses],
             neighbors=[{"ip": n.ip, "mac": n.mac, "if_index": n.if_index, "kind": n.kind}
                        for n in poll.neighbors],
+            links=[asdict(link) for link in poll.links],
+            mac_table=[asdict(m) for m in poll.mac_table],
+            counters=[asdict(c) for c in poll.counters],
+            counters_at=poll.counters_at.isoformat() if poll.counters_at else None,
         )
     return entry
 

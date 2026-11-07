@@ -92,6 +92,36 @@ def test_poll_simulated_core_switch(responder):
     assert len(neighbors) == len(CORE_SWITCH.neighbors)
     assert ("2001:db8:10:20::50", "00:50:56:24:20:32") in neighbors
 
+    links = {(link.protocol, link.if_index): link for link in device.links}
+    assert set(links) == {("cdp", 1), ("lldp", 2), ("lldp", 3), ("lldp", 4)}
+    sw2 = links[("lldp", 3)]
+    assert (sw2.remote_name, sw2.remote_port, sw2.local_port) == (
+        "ACCESS-SW-2", "sfp-sfpplus1", "Gi1/0/3")
+    assert (sw2.remote_chassis_id, sw2.remote_mgmt_ip) == ("4c:5e:0c:99:00:12", "10.10.99.12")
+    edge = links[("cdp", 1)]
+    assert (edge.remote_name, edge.remote_mgmt_ip, edge.remote_platform) == (
+        "EDGE-RTR-1", "10.10.0.1", "Cisco IOSv")
+
+    macs = {(m.mac, m.if_index, m.vlan) for m in device.mac_table}
+    assert ("00:14:22:1a:20:14", 2, 10) in macs  # a staff PC, seen on the trunk to ACCESS-SW-1
+    assert ("00:50:56:24:20:32", 3, 20) in macs
+    assert not any(m.mac == "00:00:0c:c0:10:00" for m in device.mac_table)  # "self" skipped
+    assert len(macs) == len([e for e in CORE_SWITCH.fdb if e.status == 3])
+
+    counters = {c.if_index: c for c in device.counters}
+    assert counters[2].bits == 64 and counters[2].in_octets > 0
+    assert device.counters_at is not None
+
+
+def test_counters_grow(responder):
+    first, = asyncio.run(poll_all(sim_settings(), [(LISTEN, PORT)]))
+    time.sleep(1.1)
+    second, = asyncio.run(poll_all(sim_settings(), [(LISTEN, PORT)]))
+    before = {c.if_index: c.in_octets for c in first.counters}
+    after = {c.if_index: c.in_octets for c in second.counters}
+    assert after[2] > before[2]  # oper up: traffic flows
+    assert after[1] - before[1] > after[4] - before[4]  # the WAN uplink is busier than AP-1
+
 
 def test_dead_target_does_not_break_live_one(responder):
     """Regression: on Windows a "port unreachable" from one target used to make every other

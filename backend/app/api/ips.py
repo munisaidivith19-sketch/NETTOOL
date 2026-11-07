@@ -20,6 +20,7 @@ from app.security.sessions import utcnow
 from app.services import audit, ipam
 from app.services.alerts import run_ipam_checks
 from app.services.ipaddr import ip_key, network_key_range
+from app.services.topology import locate
 
 router = APIRouter(prefix="/api/ips", tags=["ipam"], dependencies=[Depends(require_user)])
 
@@ -103,12 +104,19 @@ async def ip_detail(request: Request, ip: IpPath) -> dict:
         "reservation": record.get("reservation") if record else None,
         "owner": owner,
         "seen_by": seen_by,
-        # The access-switch port needs MAC address tables (BRIDGE-MIB), added in Phase 5.
-        "switch_port": None,
+        # Access-switch port from the MAC address tables (services/topology.py).
+        "switch_port": await _switch_port(db, str(address), now),
         "duplicate_alert": alert,
         "first_seen": record.get("first_seen") if record else None,
         "last_seen": record.get("last_seen") if record else None,
     }
+
+
+async def _switch_port(db, ip: str, now) -> dict | None:
+    found = await locate(db, ip, now)
+    if found["location"] is None:
+        return None
+    return {**found["location"], "message": found["message"]}
 
 
 async def _device_port(db, device_id, if_index) -> dict:

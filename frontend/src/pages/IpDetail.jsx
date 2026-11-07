@@ -74,7 +74,17 @@ export default function IpDetail() {
               </Hop>
               <Hop label="Device">{d.owner && <PortName port={d.owner} />}</Hop>
               <Hop label="Switch port">
-                {d.switch_port ?? <span className="muted">needs MAC address tables (coming in Phase 5)</span>}
+                {d.switch_port ? (
+                  <>
+                    <Link to={`/devices/${d.switch_port.device_id}`} className="row-link">
+                      {d.switch_port.device}
+                    </Link>{" "}
+                    port <span className="addr">{d.switch_port.port}</span>
+                    {d.switch_port.vlan ? `, VLAN ${d.switch_port.vlan}` : ""}
+                  </>
+                ) : (
+                  <span className="muted">not found in any switch MAC address table</span>
+                )}
               </Hop>
             </ol>
             <dl className="facts">

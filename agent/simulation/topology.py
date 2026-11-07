@@ -38,6 +38,16 @@ class Neighbor:
 
 
 @dataclass
+class FdbEntry:
+    """One row of a switch MAC address table: this MAC was learned on this port."""
+
+    mac: str
+    if_index: int
+    vlan: int | None = None  # None on switches with only the VLAN-unaware BRIDGE-MIB table
+    status: int = 3  # 3 learned, 4 self (the switch's own MAC)
+
+
+@dataclass
 class SimDevice:
     slug: str
     listen: str
@@ -48,6 +58,26 @@ class SimDevice:
     uptime_seconds: int
     interfaces: list[Iface]
     neighbors: list[Neighbor] = field(default_factory=list)
+    mgmt_ip: str = ""  # in-band address the device announces in LLDP / CDP
+    platform: str = ""  # CDP platform string
+    fdb_mib: str = ""  # "q-bridge" (VLAN-aware), "bridge" (BRIDGE-MIB only) or "" (no table)
+    fdb: list[FdbEntry] = field(default_factory=list)
+    bridge_ports: dict[int, int] = field(default_factory=dict)  # ifIndex -> bridge port number
+    lldp_ports: dict[int, int] = field(default_factory=dict)  # ifIndex -> lldpLocPortNum
+    counter_bits: int = 64  # 32 = only the old ifInOctets/ifOutOctets (they wrap after 4 GB)
+    traffic: dict[int, tuple[int, int]] = field(default_factory=dict)  # ifIndex -> in/out B/s
+
+    def iface(self, if_index: int) -> Iface:
+        return next(i for i in self.interfaces if i.index == if_index)
+
+    @property
+    def chassis_mac(self) -> str:
+        """The MAC an LLDP neighbour reports as this device's chassis ID."""
+        with_mac = [i for i in self.interfaces if i.mac]  # loopbacks have no MAC
+        for iface in with_mac:
+            if any(c.startswith(self.mgmt_ip + "/") for c in iface.ipv4):
+                return iface.mac
+        return with_mac[0].mac
 
 
 def _endpoints(vlan_if: int, subnet: str, oui: str, start: int, count: int) -> list[Neighbor]:
@@ -57,6 +87,19 @@ def _endpoints(vlan_if: int, subnet: str, oui: str, start: int, count: int) -> l
                  f"{oui}:{0x10 + vlan_if:02x}:{0x20:02x}:{start + i:02x}")
         for i in range(count)
     ]
+
+
+# Endpoints. Their MACs appear in the core's ARP table and in the access switches' MAC tables.
+STAFF_PCS = _endpoints(10, "10.10.10.0", "00:14:22", 20, 6)  # Dell
+LAB_VMS = _endpoints(20, "10.10.20.0", "00:50:56", 50, 8)  # VMware
+PRINTERS = _endpoints(30, "10.10.30.0", "3c:d9:2b", 10, 3)  # HP
+WIFI_CLIENTS = [Neighbor(20, "10.10.20.81", "f0:18:98:20:00:81"),  # Apple laptops on AP-1
+                Neighbor(20, "10.10.20.82", "f0:18:98:20:00:82")]
+
+
+def _fdb(endpoints: list[Neighbor], ports: list[int], vlan: int | None) -> list[FdbEntry]:
+    """Endpoint i is plugged into ports[i]."""
+    return [FdbEntry(n.mac, port, vlan) for n, port in zip(endpoints, ports, strict=True)]
 
 
 EDGE_ROUTER = SimDevice(
@@ -82,6 +125,9 @@ EDGE_ROUTER = SimDevice(
         Neighbor(2, "10.10.0.2", "00:00:0c:c0:00:01"),
         Neighbor(2, "2001:db8:10::2", "00:00:0c:c0:00:01"),
     ],
+    mgmt_ip="10.10.255.1",
+    platform="Cisco IOSv",
+    traffic={1: (3_100_000, 1_200_000), 2: (1_150_000, 3_000_000)},
 )
 
 CORE_SWITCH = SimDevice(
@@ -112,9 +158,7 @@ CORE_SWITCH = SimDevice(
     ],
     neighbors=[
         Neighbor(1, "10.10.0.1", "00:00:0c:a1:00:02"),
-        *_endpoints(10, "10.10.10.0", "00:14:22", 20, 6),   # staff PCs (Dell)
-        *_endpoints(20, "10.10.20.0", "00:50:56", 50, 8),   # lab VMs (VMware)
-        *_endpoints(30, "10.10.30.0", "3c:d9:2b", 10, 3),   # printers (HP)
+        *STAFF_PCS, *LAB_VMS, *PRINTERS, *WIFI_CLIENTS,
         Neighbor(99, "10.10.99.11", "3c:d9:2b:99:00:11"),   # ACCESS-SW-1
         Neighbor(99, "10.10.99.12", "4c:5e:0c:99:00:12"),   # ACCESS-SW-2
         Neighbor(99, "10.10.99.21", "00:0b:86:99:00:21"),   # AP-1
@@ -122,6 +166,21 @@ CORE_SWITCH = SimDevice(
         Neighbor(10, "2001:db8:10:10::21", "00:14:22:1a:20:15"),
         Neighbor(20, "2001:db8:10:20::50", "00:50:56:24:20:32"),
     ],
+    mgmt_ip="10.10.99.1",
+    platform="cisco C9300-24T",
+    fdb_mib="q-bridge",
+    # The trunks to the access switches see every endpoint behind them, which is why NetMap
+    # must ignore ports with an LLDP/CDP neighbour when it answers "where is this PC?".
+    fdb=[
+        *_fdb(STAFF_PCS, [2] * 6, 10), *_fdb(PRINTERS, [2] * 3, 30),
+        FdbEntry("3c:d9:2b:99:00:11", 2, 99),
+        *_fdb(LAB_VMS, [3] * 8, 20), FdbEntry("4c:5e:0c:99:00:12", 3, 99),
+        *_fdb(WIFI_CLIENTS, [4] * 2, 20), FdbEntry("00:0b:86:99:00:21", 4, 99),
+        FdbEntry("00:00:0c:c0:10:00", 0, 10, status=4),  # its own SVI MACs
+        FdbEntry("00:00:0c:c0:99:00", 0, 99, status=4),
+    ],
+    traffic={1: (3_000_000, 1_150_000), 2: (650_000, 1_900_000), 3: (900_000, 2_400_000),
+             4: (150_000, 600_000)},
 )
 
 ACCESS_SW_1 = SimDevice(
@@ -134,12 +193,21 @@ ACCESS_SW_1 = SimDevice(
     uptime_seconds=864_000,
     interfaces=[
         *[Iface(i, str(i), f"{i}", 6, 1000, f"3c:d9:2b:99:01:{i:02x}", f"Desk port {i}",
-                oper_up=i <= 5) for i in range(1, 9)],
+                oper_up=i <= 7) for i in range(1, 9)],
         Iface(9, "9", "9", 6, 1000, "3c:d9:2b:99:01:09", "Uplink to CORE-SW-1"),
         Iface(99, "VLAN99", "DEFAULT_VLAN99", 53, 1000, "3c:d9:2b:99:00:11", "Management",
               ipv4=["10.10.99.11/24"]),
     ],
     neighbors=[Neighbor(99, "10.10.99.1", "00:00:0c:c0:99:00")],
+    mgmt_ip="10.10.99.11",
+    fdb_mib="q-bridge",
+    fdb=[
+        *_fdb(STAFF_PCS, [1, 2, 3, 4, 5, 5], 10),  # two PCs behind a desk switch on port 5
+        *_fdb(PRINTERS, [6, 7, 7], 30),
+        FdbEntry("00:00:0c:c0:10:00", 9, 10), FdbEntry("00:00:0c:c0:99:00", 9, 99),
+        FdbEntry("3c:d9:2b:99:00:11", 0, 99, status=4),
+    ],
+    traffic={9: (1_900_000, 650_000)},
 )
 
 ACCESS_SW_2 = SimDevice(
@@ -159,6 +227,18 @@ ACCESS_SW_2 = SimDevice(
               ipv4=["10.10.99.12/24"]),
     ],
     neighbors=[Neighbor(99, "10.10.99.1", "00:00:0c:c0:99:00")],
+    mgmt_ip="10.10.99.12",
+    # BRIDGE-MIB only (no VLANs in the MAC table), and port numbers that differ from the
+    # ifIndex, so the agent's bridge-port and LLDP-port mapping is exercised.
+    fdb_mib="bridge",
+    fdb=[
+        *_fdb(LAB_VMS, [1, 2, 3, 4, 5, 6, 6, 6], None),  # three VMs on one host on ether6
+        FdbEntry("00:00:0c:c0:20:00", 25, None), FdbEntry("00:00:0c:c0:99:00", 25, None),
+        FdbEntry("4c:5e:0c:99:00:12", 0, None, status=4),
+    ],
+    bridge_ports={**{i: i for i in range(1, 9)}, 25: 9},
+    lldp_ports={**{i: i for i in range(1, 9)}, 25: 9},
+    traffic={25: (2_400_000, 900_000)},
 )
 
 AP_1 = SimDevice(
@@ -176,6 +256,47 @@ AP_1 = SimDevice(
         Iface(3, "wifi1", "Radio 2.4 GHz", 71, 300, "00:0b:86:99:24:00", "campus-2g"),
     ],
     neighbors=[Neighbor(1, "10.10.99.1", "00:00:0c:c0:99:00")],
+    mgmt_ip="10.10.99.21",
+    fdb_mib="bridge",
+    fdb=[*_fdb(WIFI_CLIENTS, [2, 2], None), FdbEntry("00:00:0c:c0:20:00", 1, None)],
+    counter_bits=32,  # an older device: its 32-bit octet counters wrap, the agent must cope
+    traffic={1: (600_000, 150_000), 2: (140_000, 580_000)},
 )
 
 DEVICES = [EDGE_ROUTER, CORE_SWITCH, ACCESS_SW_1, ACCESS_SW_2, AP_1]
+
+
+
+@dataclass
+class Cable:
+    """A cable between two simulated devices; both ends announce each other over `protocol`."""
+
+    protocol: str  # "lldp" | "cdp"
+    a: SimDevice
+    a_if: int
+    b: SimDevice
+    b_if: int
+
+
+@dataclass
+class ExternalNeighbor:
+    """A neighbour that NetMap does not manage (here: the ISP's router)."""
+
+    device: SimDevice
+    if_index: int
+    sys_name: str
+    port: str
+    chassis_mac: str
+    mgmt_ip: str
+
+
+CABLES = [
+    Cable("cdp", EDGE_ROUTER, 2, CORE_SWITCH, 1),
+    Cable("lldp", CORE_SWITCH, 2, ACCESS_SW_1, 9),
+    Cable("lldp", CORE_SWITCH, 3, ACCESS_SW_2, 25),
+    Cable("lldp", CORE_SWITCH, 4, AP_1, 1),
+]
+EXTERNAL_NEIGHBORS = [
+    ExternalNeighbor(EDGE_ROUTER, 1, "isp-pe-01.example.net", "xe-0/0/7", "00:00:0c:ee:00:01",
+                     "203.0.113.1"),
+]

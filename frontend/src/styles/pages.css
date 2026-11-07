@@ -706,3 +706,89 @@
     font-size: var(--text-lg);
   }
 }
+
+/* Topology (Phase 5) */
+.topology-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.topology-canvas {
+  position: relative; /* Cytoscape needs it; see the note in index.html */
+  height: 520px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-sunken);
+}
+
+.facts-compact {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.legend-external {
+  width: 14px;
+  height: 12px;
+  border: 2px dashed var(--muted);
+  border-radius: var(--radius-sm);
+}
+
+.legend-line {
+  width: 22px;
+  border-top: 3px solid var(--muted);
+}
+
+.legend-line-down {
+  border-top-style: dashed;
+  border-top-color: var(--down);
+}
+
+.locate-result {
+  margin-bottom: var(--space-4);
+}
+
+.locate-result p {
+  margin: 0 0 var(--space-1);
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 760px) {
+  .topology-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .topology-canvas {
+    height: 380px;
+  }
+}

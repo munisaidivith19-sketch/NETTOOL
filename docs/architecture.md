@@ -176,18 +176,67 @@ dark mode and phone width, while recording console errors, exceptions and CSP vi
 caught one real problem: Vite had inlined a small font as a `data:` URI, which the CSP
 blocked. Fixed with `assetsInlineLimit: 0` instead of loosening the CSP.
 
+## Added in Phase 5: topology, location and monitoring
+```
+ agent (each cycle)                                  backend (on each report)
+  LLDP-MIB lldpRemTable ─┐                            links ──► topology graph, uplink set
+  CISCO-CDP-MIB cache   ─┼─ links ──────────┐         mac_entries ─► "which port is this PC on"
+  Q-BRIDGE / BRIDGE FDB ─── mac_table ──────┼─ report mac_addresses ─► new-unknown-MAC alert
+  ifHC*Octets, errors   ─── counters ───────┘         interfaces.rates + metrics ─► traffic
+                                                      alerts ─► notify (Telegram / e-mail)
+```
+
+**Agent** (`discovery/snmp.py`, parsers in `discovery/oids.py`):
+- LLDP: `lldpRemTable` (neighbour name, chassis ID, port ID; their subtypes decide whether a
+  value is a MAC, an address or text), `lldpRemManAddrTable` (management IP, encoded in the
+  index) and `lldpLocPortTable`. LLDP numbers ports its own way, so the local port number is
+  mapped to an ifIndex by matching names; ACCESS-SW-2 in the simulation uses different numbers
+  on purpose.
+- CDP: `cdpCacheTable` (index = ifIndex.deviceIndex; device ID, port, platform, IPv4 address).
+- MAC tables: Q-BRIDGE `dot1qTpFdbTable` (VLAN-aware) first, BRIDGE-MIB `dot1dTpFdbTable` as
+  the fallback; bridge port numbers are mapped through `dot1dBasePortIfIndex`. The switch's own
+  MACs (`self`) and invalid rows are skipped.
+- Counters: 64-bit `ifHCInOctets`/`ifHCOutOctets`, or 32-bit `ifInOctets`/`ifOutOctets` on old
+  devices, plus error counters. The agent records the exact time it read them.
+
+**Backend**
+| Piece | File | What it does |
+|---|---|---|
+| Links | `services/links.py` | One row per (device, port, protocol, neighbour). The far end is matched to a known device by management IP, then any interface IP, then system name (domain suffix ignored), then chassis MAC. No match = an *external* neighbour, still drawn on the map. A link missing from a report becomes `lost` (a broken line, and its port still counts as an uplink); TTL deletes it after 7 days. |
+| Rates | `services/metrics.py` | `(octets now − octets before) × 8 / seconds`. A single 32-bit wrap is corrected; resets (reboot, cleared counters), gaps over 6 h and rates faster than the port are dropped instead of shown as nonsense. History is kept only for uplinks and IP interfaces (7-day TTL), so a 48-port switch doesn't fill the free-tier database. |
+| Graph | `services/topology.py` `build_graph` | Nodes = devices + external neighbours; one edge per cable even though both ends report it; edge is down if either port is down or the link is lost. |
+| Locate | `services/topology.py` `locate` | IP → MAC (ARP) → MAC-table sightings. Sightings on **uplinks** are ignored: ports with an LLDP/CDP neighbour, more than one VLAN (a trunk), or more than 10 MACs. The newest remaining sighting is the access port. Network devices are located by their own LLDP/CDP link instead. |
+| Alerts | `services/alerts.py` | `device_down` (critical if nothing answers, warning if only SNMP fails), `interface_down` (only uplinks that are enabled but down, so PCs switching off aren't noise), `new_mac` (after the learning window; never auto-resolves; resolving it records who approved the device). |
+| Notify | `services/notify.py` | Runs as a FastAPI background task after the report response. Claims each pending alert atomically, sends plain text (Telegram without `parse_mode`; e-mail subject built from fixed words only), applies a 30-minute per-alert cooldown and a 20/hour cap, and records every decision in `notifications`. The bot token is in Telegram's URL, so the httpx loggers are raised to WARNING and errors are recorded by type only. |
+
+**Frontend**: `pages/Topology.jsx` with `components/TopologyCanvas.jsx` (Cytoscape.js 3.34.4,
+pinned, loaded only when the page opens). Labels are canvas text, never HTML. Node shapes
+repeat status like `StatusMark`, and the same links are listed in a table for screen readers
+and keyboard users. Device pages show traffic per interface and the neighbour table; the IP
+page fills in the switch-port hop; Admin → Notifications shows channel status and the
+delivery log.
+
+**Browser check.** Headless Edge found that Cytoscape injects an inline `<style>` tag, which
+the CSP blocked. Instead of allowing inline styles, `index.html` carries an element with the id
+Cytoscape looks for (so it skips the injection), and its one rule (`position: relative`) lives
+in `pages.css`. After that: no console errors or CSP violations in light, dark or phone layouts.
+
 ## MongoDB indexes
 | Collection | Index | Why |
 |---|---|---|
 | devices | `mgmt_ip` unique, `status`, `(agent_id, mgmt_ip_key)` | one record per managed device; status filters; known-devices list |
-| interfaces | `(device_id, if_index)` unique | one row per interface |
+| interfaces | `(device_id, if_index)` unique, `mac` | one row per interface; LLDP chassis-ID matching and "is this MAC a known device?" |
 | ip_addresses | `ip_key` unique, `mac`, `reservation.hostname` (sparse), `device_id` (sparse) | the database itself refuses a duplicate IP record or reservation; IP-by-MAC and host-name lookups |
 | arp_entries | `(ip_key, mac, device_id)` unique, `mac`, `last_seen` | duplicate-IP detection, newest first |
 | subnets | `network` unique, `(version, start_key, end_key)` | no duplicate subnets; overlap and "which subnet holds this IP" lookups |
-| alerts | `key` unique, `(status, type, last_seen)` | the same alert is updated, not re-created; open-alert lists |
+| alerts | `key` unique, `(status, type, last_seen)`, `notify_pending` (sparse) | the same alert is updated, not re-created; open-alert lists; notification queue |
 | users | `username` unique | |
 | sessions | `token_hash` unique, `expires_at` TTL (0 s) | sessions vanish when they expire |
-| metrics | `ts` TTL (7 days) | keeps the free-tier database small |
+| metrics | `ts` TTL (7 days), `(device_id, if_index, ts)` | keeps the free-tier database small; per-interface history |
+| links | `(device_id, protocol, if_index, remote_key)` unique, `remote_device_id`, `last_seen` TTL (7 days) | one row per neighbour per port; lost links expire |
+| mac_entries | `(device_id, if_index, mac, vlan)` unique, `(mac, last_seen)`, `last_seen` TTL (7 days) | where a MAC is now; old sightings expire |
+| mac_addresses | `mac` unique, `first_seen`, `pending_check` (sparse) | every MAC ever seen: "never seen before" means not in here |
+| notifications | `(alert_key, at)`, `(status, at)`, `at` TTL (7 days) | cooldown, hourly cap, delivery log |
 | login_attempts | `(ip, at)`, `at` TTL | per-IP login rate limit that survives restarts |
 | agent_nonces | `(agent_id, nonce)` unique, TTL 10 min | replay protection: a nonce works once |
 | audit_log | `at`, `(action, at)`, `(actor.username, at)` | fast newest-first and filtered reads |

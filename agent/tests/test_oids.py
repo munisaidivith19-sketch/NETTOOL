@@ -111,3 +111,76 @@ def test_detect_vendor(sys_object_id, vendor):
 
 def test_enterprise_number():
     assert enterprise_number("1.3.6.1.4.1.25461.2.3.1") == 25461
+
+
+# ---- Phase 5: LLDP, CDP, MAC tables -----------------------------------------------------------
+
+def test_lldp_rem_index():
+    assert oids.parse_lldp_rem_index((0, 9, 1)) == (9, 1)
+    assert oids.parse_lldp_rem_index((123456, 2, 7)) == (2, 7)  # timeMark is ignored
+    with pytest.raises(oids.OidIndexError):
+        oids.parse_lldp_rem_index((9, 1))
+
+
+@pytest.mark.parametrize(
+    ("index", "expected"),
+    [
+        ((0, 3, 1, 1, 4, 10, 10, 99, 1), (3, 1, "10.10.99.1")),
+        ((0, 3, 1, 2, 16, *V6), (3, 1, "2001:db8:10:10::1")),
+    ],
+)
+def test_lldp_man_addr_index(index, expected):
+    assert oids.parse_lldp_man_addr_index(index) == expected
+
+
+@pytest.mark.parametrize(
+    "index",
+    [(0, 3, 1, 1), (0, 3, 1, 1, 4, 10, 10, 99), (0, 3, 1, 6, 6, 0, 1, 2, 3, 4, 5),
+     (0, 3, 1, 1, 4, 10, 10, 99, 300)],
+)
+def test_lldp_man_addr_index_rejects_bad_input(index):
+    with pytest.raises(oids.OidIndexError):
+        oids.parse_lldp_man_addr_index(index)
+
+
+def test_mac_indexes():
+    assert oids.parse_mac_index((0, 20, 34, 26, 32, 20)) == "00:14:22:1a:20:14"
+    assert oids.parse_qbridge_fdb_index((10, 0, 20, 34, 26, 32, 20)) == (10, "00:14:22:1a:20:14")
+    for bad in ((0, 20, 34, 26, 32), (0, 20, 34, 26, 32, 256)):
+        with pytest.raises(oids.OidIndexError):
+            oids.parse_mac_index(bad)
+    with pytest.raises(oids.OidIndexError):
+        oids.parse_qbridge_fdb_index((0, 20, 34, 26, 32, 20))
+
+
+def test_cdp_index():
+    assert oids.parse_cdp_index((2, 1)) == (2, 1)
+    with pytest.raises(oids.OidIndexError):
+        oids.parse_cdp_index((2,))
+
+
+@pytest.mark.parametrize(
+    ("subtype", "raw", "expected"),
+    [
+        (4, bytes.fromhex("3cd92b990011"), "3c:d9:2b:99:00:11"),  # macAddress
+        (5, bytes([1, 10, 10, 99, 1]), "10.10.99.1"),  # networkAddress: family + IPv4
+        (7, b"CORE-SW-1", "CORE-SW-1"),  # local: free text
+        (4, b"short", "short"),  # says MAC but isn't 6 bytes: shown as text
+        (1, b"evil\x1b[31m\x00name", "evil [31m name"),  # control characters removed
+        (7, b"", None),
+    ],
+)
+def test_lldp_chassis_id(subtype, raw, expected):
+    assert oids.lldp_chassis_id(subtype, raw) == expected
+
+
+def test_lldp_port_id():
+    assert oids.lldp_port_id(3, bytes.fromhex("4c5e0c990219")) == "4c:5e:0c:99:02:19"
+    assert oids.lldp_port_id(5, b"sfp-sfpplus1") == "sfp-sfpplus1"
+    assert oids.lldp_port_id(5, b"x" * 400) == "x" * 255  # bounded
+
+
+def test_cdp_address():
+    assert oids.cdp_address(1, bytes([10, 10, 0, 2])) == "10.10.0.2"
+    assert oids.cdp_address(1, b"\x0a\x0a") is None
+    assert oids.cdp_address(20, bytes([10, 10, 0, 2])) is None  # not an IPv4 address type

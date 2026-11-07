@@ -11,6 +11,11 @@ from app.security.agent_auth import NONCE_TTL_SECONDS
 from app.security.rate_limit import IP_WINDOW
 
 METRICS_TTL_SECONDS = 7 * 24 * 60 * 60
+# A switch MAC table row not seen for a week is history, not location data.
+MAC_ENTRY_TTL_SECONDS = 7 * 24 * 60 * 60
+# A link (LLDP/CDP neighbour) not seen for a week is removed from the map.
+LINK_TTL_SECONDS = 7 * 24 * 60 * 60
+NOTIFICATIONS_TTL_SECONDS = 7 * 24 * 60 * 60
 LOGIN_ATTEMPTS_TTL_SECONDS = int(IP_WINDOW.total_seconds()) * 3
 
 # CLAUDE.md section 6. Unique indexes are what actually stop duplicates (e.g. two records for the
@@ -24,6 +29,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "interfaces": [
         IndexModel([("device_id", ASCENDING), ("if_index", ASCENDING)], unique=True,
                    name="device_ifindex_unique"),
+        IndexModel([("mac", ASCENDING)], name="mac"),  # LLDP chassis-ID matching, known MACs
     ],
     "ip_addresses": [
         IndexModel([("ip_key", ASCENDING)], unique=True, name="ip_key_unique"),
@@ -48,10 +54,40 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("key", ASCENDING)], unique=True, name="key_unique"),
         IndexModel([("status", ASCENDING), ("type", ASCENDING), ("last_seen", DESCENDING)],
                    name="status_type_seen"),
+        IndexModel([("notify_pending", ASCENDING)], sparse=True, name="notify_pending"),
     ],
     "users": [IndexModel([("username", ASCENDING)], unique=True, name="username_unique")],
     "metrics": [
         IndexModel([("ts", ASCENDING)], expireAfterSeconds=METRICS_TTL_SECONDS, name="ts_ttl"),
+        IndexModel([("device_id", ASCENDING), ("if_index", ASCENDING), ("ts", DESCENDING)],
+                   name="device_if_ts"),
+    ],
+    # Phase 5: topology, MAC tables, notifications
+    "links": [
+        IndexModel([("device_id", ASCENDING), ("protocol", ASCENDING), ("if_index", ASCENDING),
+                    ("remote_key", ASCENDING)], unique=True, name="device_port_remote_unique"),
+        IndexModel([("remote_device_id", ASCENDING)], name="remote_device"),
+        IndexModel([("last_seen", ASCENDING)], expireAfterSeconds=LINK_TTL_SECONDS,
+                   name="last_seen_ttl"),
+    ],
+    "mac_entries": [
+        IndexModel([("device_id", ASCENDING), ("if_index", ASCENDING), ("mac", ASCENDING),
+                    ("vlan", ASCENDING)], unique=True, name="device_port_mac_vlan_unique"),
+        IndexModel([("mac", ASCENDING), ("last_seen", DESCENDING)], name="mac_seen"),
+        IndexModel([("last_seen", ASCENDING)], expireAfterSeconds=MAC_ENTRY_TTL_SECONDS,
+                   name="last_seen_ttl"),
+    ],
+    "mac_addresses": [
+        # Every MAC ever seen in a switch table: "never seen before" = not in here.
+        IndexModel([("mac", ASCENDING)], unique=True, name="mac_unique"),
+        IndexModel([("first_seen", ASCENDING)], name="first_seen"),
+        IndexModel([("pending_check", ASCENDING)], sparse=True, name="pending_check"),
+    ],
+    "notifications": [
+        IndexModel([("alert_key", ASCENDING), ("at", DESCENDING)], name="alert_at"),
+        IndexModel([("status", ASCENDING), ("at", DESCENDING)], name="status_at"),
+        IndexModel([("at", ASCENDING)], expireAfterSeconds=NOTIFICATIONS_TTL_SECONDS,
+                   name="at_ttl"),
     ],
     "sessions": [
         # expireAfterSeconds=0: each document is deleted once its own expires_at time has passed.

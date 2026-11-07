@@ -22,6 +22,17 @@ export const dashboard = {
 export const devices = {
   list: (query, options) => request("GET", "/api/devices", { query, ...options }),
   get: (id, options) => request("GET", `/api/devices/${enc(id)}`, options),
+  metrics: (id, query, options) => request("GET", `/api/devices/${enc(id)}/metrics`, { query, ...options }),
+};
+
+export const topology = {
+  graph: (options) => request("GET", "/api/topology", options),
+  locate: (q, options) => request("GET", "/api/topology/locate", { query: { q }, ...options }),
+};
+
+export const notifications = {
+  status: (options) => request("GET", "/api/admin/notifications", options),
+  test: () => request("POST", "/api/admin/notifications/test"),
 };
 
 export const subnets = {

@@ -4,14 +4,14 @@ The report body is large (up to 10 MB, see LARGE_BODY_PATHS) and fully untrusted
 validated by app/models/report.py before anything touches the database.
 """
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
 from app.models.agents import HeartbeatRequest
 from app.models.report import MAX_DEVICES, DiscoveryReport, KnownDevice
 from app.security.agent_auth import CurrentAgent, require_agent
 from app.security.sessions import utcnow
-from app.services import audit
-from app.services.alerts import run_ipam_checks
+from app.services import audit, notify
+from app.services.alerts import run_ipam_checks, run_monitoring_checks
 from app.services.ingest import ingest_report
 
 router = APIRouter(prefix="/api/agent", tags=["agent"], dependencies=[Depends(require_agent)])
@@ -32,14 +32,19 @@ async def heartbeat(
 
 @router.post("/report")
 async def report(
-    body: DiscoveryReport, request: Request, agent: CurrentAgent = Depends(require_agent)
+    body: DiscoveryReport, request: Request, background: BackgroundTasks,
+    agent: CurrentAgent = Depends(require_agent),
 ) -> dict:
     db = request.app.state.db
+    settings = request.app.state.settings
     now = utcnow()
     summary = await ingest_report(db, agent.id, body, now)
     # New data is the only trigger on Render (no background scheduler), so alerts are
     # re-evaluated right here.
-    summary |= await run_ipam_checks(db, request.app.state.settings, now)
+    summary |= await run_ipam_checks(db, settings, now)
+    summary |= await run_monitoring_checks(db, settings, now)
+    # Telegram / e-mail after the response is sent: the agent never waits on them.
+    background.add_task(notify.dispatch_pending, db, settings)
     await db.agents.update_one(
         {"_id": agent.id},
         {"$set": {"last_seen_at": now, "last_seen_ip": audit.client_ip(request),

@@ -57,7 +57,8 @@ function AlertCard({ alert, canAct, onAction }) {
             </button>
           )}
           <button type="button" className="button button-secondary" disabled={busy} onClick={() => act(alertsApi.resolve)}>
-            Resolve
+            {/* Resolving a new-device alert records the MAC as known (approved). */}
+            {alert.type === "new_mac" ? "Mark as known" : "Resolve"}
           </button>
         </div>
       )}

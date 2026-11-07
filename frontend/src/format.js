@@ -72,6 +72,20 @@ export function formatUptime(seconds) {
   return `${minutes} min`;
 }
 
+/* Traffic rate in bits per second, in network units (1 kb/s = 1000 b/s, not 1024). */
+export function formatBps(bps) {
+  if (bps === null || bps === undefined) return "–";
+  const units = ["b/s", "kb/s", "Mb/s", "Gb/s", "Tb/s"];
+  let value = Number(bps);
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit += 1;
+  }
+  const digits = unit === 0 || value >= 100 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(digits)} ${units[unit]}`;
+}
+
 export const DEVICE_STATUS = {
   up: { mark: "up", label: "Up" },
   snmp_error: { mark: "warning", label: "SNMP error" },
@@ -82,8 +96,8 @@ export const ALERT_TYPES = {
   duplicate_ip: "Duplicate IP",
   subnet_usage: "Subnet usage",
   device_down: "Device down",
-  interface_down: "Interface down",
-  new_mac: "New MAC",
+  interface_down: "Uplink down",
+  new_mac: "New device (MAC)",
   anomaly: "Anomaly",
   compliance: "Compliance",
 };

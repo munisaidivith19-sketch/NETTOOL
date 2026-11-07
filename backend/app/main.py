@@ -21,7 +21,9 @@ from app.api import (
     dashboard,
     devices,
     ips,
+    notifications,
     subnets,
+    topology,
     users,
 )
 from app.config import Settings, get_settings
@@ -38,6 +40,7 @@ logger = logging.getLogger("netmap")
 API_ROUTERS = (
     auth.router, users.router, agents.router, audit.router, agent_ingest.router,
     subnets.router, ips.router, alerts.router, devices.router, dashboard.router,
+    topology.router, notifications.router,
 )
 
 
