@@ -7,7 +7,8 @@ Everything here is made up for demos and tests:
 - MAC prefixes use OUIs registered to the matching vendor, so device-type classification
   (Phase 7) has realistic input; the rest of each MAC is invented
 
-Each device listens on its own loopback address (127.0.0.11-15, UDP 1161) when simulated.
+Each device listens on its own loopback address (127.0.0.11-16, UDP 1161) when simulated.
+The Cisco IOS devices also accept SSH on TCP 2222 (simulation/ssh_sim.py).
 """
 
 from dataclasses import dataclass, field
@@ -263,7 +264,28 @@ AP_1 = SimDevice(
     traffic={1: (600_000, 150_000), 2: (140_000, 580_000)},
 )
 
-DEVICES = [EDGE_ROUTER, CORE_SWITCH, ACCESS_SW_1, ACCESS_SW_2, AP_1]
+# Phase 6: a switch straight out of the box. Someone gave it a DHCP address and an SSH
+# login, nothing else: default hostname "Switch", only VLAN 1, no static management IP.
+# NetMap should flag it as unconfigured and offer the baseline template.
+NEW_SWITCH = SimDevice(
+    slug="new-switch",
+    listen="127.0.0.16",
+    sys_name="Switch",
+    sys_descr="Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(7)E8 "
+              "(simulated)",
+    sys_object_id="1.3.6.1.4.1.9.1.1208",
+    sys_location="",
+    uptime_seconds=5_400,
+    interfaces=[
+        Iface(1, "Gi1/0/1", "GigabitEthernet1/0/1", 6, 1000, "00:00:0c:5a:00:01"),
+        *[Iface(n, f"Gi1/0/{n}", f"GigabitEthernet1/0/{n}", 6, 1000, f"00:00:0c:5a:00:{n:02x}",
+                oper_up=False) for n in range(2, 9)],
+        Iface(100, "Vl1", "Vlan1", 53, 1000, "00:00:0c:5a:01:00", ipv4=["10.10.99.50/24"]),
+    ],
+    mgmt_ip="10.10.99.50",
+)
+
+DEVICES = [EDGE_ROUTER, CORE_SWITCH, ACCESS_SW_1, ACCESS_SW_2, AP_1, NEW_SWITCH]
 
 
 

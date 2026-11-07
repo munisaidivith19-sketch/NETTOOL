@@ -1,8 +1,10 @@
 """Agent entry point.
 
 Run from the agent folder:
-  python -m netmap_agent.main --once     one discovery cycle, then exit
-  python -m netmap_agent.main            repeat every POLL_INTERVAL_SECONDS
+  python -m netmap_agent.main --once     one discovery cycle + config backups, then exit
+  python -m netmap_agent.main            repeat every POLL_INTERVAL_SECONDS; back up configs
+                                         every CONFIG_BACKUP_INTERVAL_SECONDS; check for
+                                         approved changes every JOB_POLL_INTERVAL_SECONDS
 """
 
 import argparse
@@ -13,6 +15,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from netmap_agent import __version__
 from netmap_agent.config import AgentSettings, get_settings
+from netmap_agent.config_mgmt.runner import ConfigManager
 from netmap_agent.discovery import ping, snmp
 from netmap_agent.discovery.net import hosts_of, parse_scan_range, parse_target
 from netmap_agent.report import build_report
@@ -51,7 +54,8 @@ async def run_cycle(settings: AgentSettings, uploader: Uploader) -> dict:
     return result
 
 
-async def run_forever(settings: AgentSettings, uploader: Uploader) -> None:
+async def run_forever(settings: AgentSettings, uploader: Uploader,
+                      config: ConfigManager) -> None:
     async def safe_cycle() -> None:
         try:
             await run_cycle(settings, uploader)
@@ -60,12 +64,35 @@ async def run_forever(settings: AgentSettings, uploader: Uploader) -> None:
         except Exception:
             logger.exception("Discovery cycle failed")
 
+    async def safe_backups() -> None:
+        try:
+            await asyncio.to_thread(config.backup)
+        except UploadError as exc:
+            logger.error("Config backup upload failed: %s", exc)
+        except Exception:
+            logger.exception("Config backup cycle failed")
+
+    async def safe_jobs() -> None:
+        # "Back up now" requests from the UI, then approved changes.
+        try:
+            await asyncio.to_thread(config.backup, True)
+            await asyncio.to_thread(config.run_jobs)
+        except UploadError as exc:
+            logger.error("Job poll failed: %s", exc)
+        except Exception:
+            logger.exception("Job poll failed")
+
     scheduler = AsyncIOScheduler()
-    # max_instances=1: a slow cycle is never overlapped by the next one.
+    # max_instances=1: a slow run is never overlapped by the next one.
     scheduler.add_job(safe_cycle, "interval", seconds=settings.poll_interval_seconds,
+                      max_instances=1, coalesce=True)
+    scheduler.add_job(safe_backups, "interval", seconds=settings.config_backup_interval_seconds,
+                      max_instances=1, coalesce=True)
+    scheduler.add_job(safe_jobs, "interval", seconds=settings.job_poll_interval_seconds,
                       max_instances=1, coalesce=True)
     scheduler.start()
     await safe_cycle()
+    await safe_backups()
     try:
         await asyncio.Event().wait()
     finally:
@@ -84,11 +111,14 @@ def main() -> None:
     snmp.use_selector_event_loop()
     logger.info("NetMap agent %s starting (backend %s)", __version__, settings.api_url)
     uploader = Uploader(settings)
+    config = ConfigManager(settings, uploader)
     try:
         if args.once:
             asyncio.run(run_cycle(settings, uploader))
+            config.backup()
+            config.run_jobs()
         else:
-            asyncio.run(run_forever(settings, uploader))
+            asyncio.run(run_forever(settings, uploader, config))
     finally:
         uploader.close()
 

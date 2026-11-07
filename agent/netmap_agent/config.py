@@ -46,6 +46,21 @@ class AgentSettings(BaseSettings):
     ping_timeout_ms: int = Field(default=1000, ge=100, le=10000)
     poll_interval_seconds: int = Field(default=300, ge=30, le=86400)
 
+    # Phase 6: SSH config backups and approved changes. The credential file and its key stay
+    # on this machine; see netmap_agent/credential_store.py.
+    credential_store_path: str = "credentials.enc"
+    credential_store_key: SecretStr = SecretStr("")
+    config_backup_interval_seconds: int = Field(default=86400, ge=300, le=7 * 86400)
+    job_poll_interval_seconds: int = Field(default=60, ge=10, le=3600)
+    ssh_max_parallel: int = Field(default=4, ge=1, le=16)
+    # OpenSSH known_hosts file. When set, a device whose SSH host key is missing from it or
+    # different is refused (protects against a man in the middle stealing the login).
+    ssh_known_hosts_file: str = ""
+    change_revert_minutes: int = Field(default=5, ge=1, le=120)
+    change_save_config: bool = True
+    # 60 on real devices. Only the simulator counts revert-timer minutes as seconds.
+    change_revert_seconds_per_minute: int = Field(default=60, ge=1, le=60)
+
     @field_validator("scan_ranges", "snmp_targets", mode="before")
     @classmethod
     def split_commas(cls, value: object) -> object:

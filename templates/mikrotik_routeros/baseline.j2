@@ -1,0 +1,9 @@
+{#- Baseline for a new MikroTik RouterOS device: name, management VLAN, insecure services off. -#}
+/system identity set name={{ identity }}
+/interface vlan add name=mgmt{{ mgmt_vlan }} vlan-id={{ mgmt_vlan }} interface={{ bridge }}
+/ip address add address={{ mgmt_ip }} interface=mgmt{{ mgmt_vlan }}
+/ip route add dst-address=0.0.0.0/0 gateway={{ default_gateway }}
+/ip service set telnet disabled=yes
+/ip service set ftp disabled=yes
+/ip service set www disabled=yes
+/ip ssh set strong-crypto=yes

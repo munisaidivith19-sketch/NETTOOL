@@ -75,3 +75,26 @@ export const agents = {
 export const audit = {
   list: (query, options) => request("GET", "/api/audit", { query, ...options }),
 };
+
+export const configs = {
+  overview: (options) => request("GET", "/api/configs", options),
+  compliance: (id, options) => request("GET", `/api/devices/${enc(id)}/compliance`, options),
+  versions: (id, options) => request("GET", `/api/devices/${enc(id)}/configs`, options),
+  version: (id, version, options) => request("GET", `/api/devices/${enc(id)}/configs/${enc(version)}`, options),
+  diff: (id, from, to, options) =>
+    request("GET", `/api/devices/${enc(id)}/configs/diff`, { query: { from, to }, ...options }),
+  backupNow: (id) => request("POST", `/api/devices/${enc(id)}/configs/backup-now`),
+};
+
+export const changes = {
+  list: (query, options) => request("GET", "/api/changes", { query, ...options }),
+  get: (id, options) => request("GET", `/api/changes/${enc(id)}`, options),
+  templates: (options) => request("GET", "/api/templates", options),
+  preview: (body) => request("POST", "/api/changes/preview", { body }),
+  create: (body) => request("POST", "/api/changes", { body }),
+  update: (id, body) => request("PUT", `/api/changes/${enc(id)}`, { body }),
+  submit: (id) => request("POST", `/api/changes/${enc(id)}/submit`),
+  approve: (id, body) => request("POST", `/api/changes/${enc(id)}/approve`, { body }),
+  reject: (id, reason) => request("POST", `/api/changes/${enc(id)}/reject`, { body: { reason } }),
+  cancel: (id) => request("POST", `/api/changes/${enc(id)}/cancel`),
+};

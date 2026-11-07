@@ -1,0 +1,12 @@
+{#- Turn a switch port into a secured access port for one VLAN. -#}
+interface {{ interface }}
+ description {{ description }}
+ switchport mode access
+ switchport access vlan {{ vlan_id }}
+{% if port_security %}
+ switchport port-security
+ switchport port-security maximum {{ max_macs }}
+ switchport port-security violation restrict
+{% endif %}
+ spanning-tree portfast
+ no shutdown

@@ -1,0 +1,29 @@
+{#- Baseline for a new Cisco IOS switch. Variables are validated by
+    backend/app/config_mgmt/templates.py (BaselineIOS) before this file is rendered.
+    The archive block comes first: the agent applies it before starting the revert timer,
+    because `configure terminal revert timer` needs archive to be able to roll back. -#}
+archive
+ path flash:archive
+ maximum 5
+hostname {{ hostname }}
+ip domain-name {{ domain_name }}
+service password-encryption
+ip ssh version 2
+vlan {{ mgmt_vlan }}
+ name {{ mgmt_vlan_name }}
+interface Vlan{{ mgmt_vlan }}
+ description Network management
+ ip address {{ mgmt_address }} {{ mgmt_netmask }}
+ no shutdown
+ip default-gateway {{ default_gateway }}
+banner login ^{{ banner }}^
+line con 0
+ exec-timeout 10 0
+line vty 0 4
+ exec-timeout 10 0
+ transport input ssh
+{% for port in shutdown_ports %}
+interface {{ port }}
+ description Unused
+ shutdown
+{% endfor %}

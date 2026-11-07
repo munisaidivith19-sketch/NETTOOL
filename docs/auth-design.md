@@ -1,4 +1,4 @@
-# Authentication and request security (Phase 1)
+# Authentication and request security (Phases 1 and 6)
 
 How a person and an agent prove who they are, and what stops common attacks.
 The code is in `backend/app/security/`.
@@ -129,5 +129,38 @@ Recorded today:
 - **Sign-in:** login success, failure and lockout; logout; password change; forced-change blocks
 - **Users:** create, role change, enable/disable, password reset
 - **Agents:** create, revoke, and every failed agent authentication
+- **Configs (Phase 6):** each backup result (`config.backup`, success or the error code),
+  "Back up now" requests
+- **Changes (Phase 6):** create, update, submit, approve (with `change.approve_override` when
+  an admin approves their own change), reject, cancel, push start, and the push result with
+  the before/after config fingerprints. A refused submit or self-approval is logged as `denied`.
 
 Admins read it with `GET /api/audit?action=auth&actor=alice&limit=50&before=<time>`.
+
+## 7. Configuration changes (Phase 6)
+Pushing config to a router is the most dangerous thing NetMap does, so it has several layers.
+Each one stops a different mistake or attack:
+
+| Layer | Where | Stops |
+|---|---|---|
+| Device logins only on the agent, Fernet-encrypted (key in env or Windows DPAPI) | agent | a backend or database breach revealing router passwords |
+| Secrets masked before upload, masked again on the backend; changes containing secrets refused | both | passwords ending up in MongoDB, the browser or an approval screen |
+| Config fingerprint = HMAC with the agent key, not a plain hash | agent | brute-forcing a weak enable password offline from a stored hash |
+| Templates: Jinja2 `SandboxedEnvironment`, `StrictUndefined`, Pydantic-validated variables | backend | template injection, and a missing variable silently rendering as an empty line |
+| Command denylist (ciscoconfparse2), abbreviation- and indentation-aware | backend at preview, submit and approve; **again on the agent** | `reload`, `write erase`, removing users, cutting the management or uplink interface |
+| Four-eyes approval: approver ≠ creator, enforced on the server | backend | one person (or one stolen session) changing the network alone |
+| Approved job signed with HMAC(agent key) | backend signs, agent verifies | someone with database write access editing or approving a job |
+| Approved-against fingerprint must match the device's current config | agent | pushing onto a config that changed since the reviewer saw it |
+| Revert timer (Cisco) / safe mode (MikroTik), verify with ping + a **new** SSH login | agent + device | a change that locks NetMap out: the device undoes it by itself |
+| Every step in `audit_log` and on the change's timeline; failure = critical alert | backend | changes nobody can account for |
+
+**Four-eyes in practice.** `POST /api/changes/{id}/approve` compares the session's user id
+with the change's `created_by.id`. An engineer gets 403. An admin may approve their own change
+only by sending `override_reason` (at least 10 characters). The approval is then recorded as
+`change.approve_override` and the reason is shown on the change page. The React page hides
+the Approve button from the creator, but the server check is what counts.
+
+**Why the denylist runs twice.** The backend copy gives the user an early, clear answer. The
+agent copy is the last line of defence: even a validly signed job, for example one signed
+before a denylist rule was added, is checked again right before the push.
+

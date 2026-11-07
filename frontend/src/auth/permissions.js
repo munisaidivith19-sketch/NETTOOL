@@ -7,6 +7,9 @@ const RULES = {
   "subnet.write": ["admin", "engineer"],
   "ip.reserve": ["admin", "engineer"],
   "alert.act": ["admin", "engineer"],
+  // Config text (even masked) and change requests: engineers and admins.
+  "config.read": ["admin", "engineer"],
+  "change.write": ["admin", "engineer"],
   "admin.view": ["admin"],
 };
 

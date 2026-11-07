@@ -221,6 +221,62 @@ the CSP blocked. Instead of allowing inline styles, `index.html` carries an elem
 Cytoscape looks for (so it skips the injection), and its one rule (`position: relative`) lives
 in `pages.css`. After that: no console errors or CSP violations in light, dark or phone layouts.
 
+## Added in Phase 6: config backup, compliance and safe changes
+```
+ agent (inside the network)                         backend
+  credentials.enc (Fernet) ── SSH (Netmiko) ──► device
+  show running-config / export
+     │ mask secrets, fingerprint ───── POST /api/agent/configs ──► configs (versions, diff)
+     │                                                              compliance score + alerts
+     │                                                              "unconfigured" flag
+  every minute ─────────────────── POST /api/agent/jobs/claim ◄── change_requests (approved,
+     │ check signature, expiry, denylist,                         signed at approval)
+     │ device unchanged since approval
+     │ push with revert timer / safe mode → ping + new SSH login
+     │ confirm + save, or revert now ── POST /api/agent/jobs/{id}/status ──► timeline, audit,
+                                                                            critical alert
+```
+
+**Agent** (`netmap_agent/config_mgmt/`):
+| File | What it does |
+|---|---|
+| `../credential_store.py` | Encrypted login profiles (IP or CIDR match, most specific wins). Key from `CREDENTIAL_STORE_KEY` or a DPAPI-protected key file. Passwords never printed, logged or uploaded. |
+| `connection.py` | Netmiko session with session logs off, no SSH agent/keys, optional strict known_hosts. Every library error is turned into a short code (`auth_failed`, `timeout`, `host_key_rejected`, `ssh_error`) so no device output leaks into logs. |
+| `backup.py` | Reads the config (max 1 MB) and drops volatile lines (timestamps, byte counts). Fingerprint = **HMAC-SHA256(agent key, config)**. A plain SHA-256 of a config with a weak password could be brute-forced offline from the database; an HMAC can't without the agent key. It still changes when only a password changes. |
+| `masking.py` | Replaces the value on every password / secret / community / key line with `<masked>` and keeps the type number (`secret 9 <masked>`) so compliance can still judge it. |
+| `facts.py` | The one check that needs a secret (is the SNMP community `public`/`private`?) runs here, before masking, and is sent as `true`/`false`. |
+| `denylist.py` | Blocks `reload`, `erase`, `write erase`, `delete`, `format`, `no username`, `crypto key zeroize`, RouterOS reset/remove commands, and anything but description/`no shutdown`/adding trunk VLANs on the management and uplink interfaces. Understands IOS abbreviations (`wr er`), `do`, `interface range` and indentation. Rejects control characters and RouterOS scripting. |
+| `jobsign.py` | Verifies the backend's HMAC over the job (see below). |
+| `push.py` | Cisco: `configure terminal revert timer 5` → commands → ping + new SSH login → `configure confirm` + `write memory`, or `configure revert now` and a check that the fingerprint is back to the original. MikroTik: the same idea with safe mode. |
+| `runner.py` | Backup cycle (4 devices in parallel) and job cycle (one at a time). |
+
+`masking.py`, `denylist.py` and `jobsign.py` are **byte-identical copies** in
+`backend/app/config_mgmt/`; a backend test fails if they drift. So the backend and the agent
+apply exactly the same rules, and the backend re-masks every upload (defence in depth).
+
+**Backend**
+| Piece | File | What it does |
+|---|---|---|
+| Versions | `services/configs.py` | Re-mask, store as the next version (unique `(device_id, version)`), keep 50, side-by-side diff rows from `difflib`. A new version not caused by a NetMap change raises `config_changed` (info). |
+| Compliance | `services/compliance.py` | ciscoconfparse2 over the masked text (imported only when needed: about 38 MB). IOS: Telnet on vty, no password encryption, default SNMP community, SNMP v1/v2c, no SSH v2, no banner, no exec-timeout, unused ports not shut, access ports without port security. RouterOS: insecure services, default community, weak SSH crypto. Score = 100 − weights. Below 70, or 10 points lower than last time, opens a `compliance` warning. |
+| Unconfigured | `services/configs.py` | Default host name, no VLANs besides 1, no static management IP, no default gateway. Routers (an IP on a routed port) are exempt from the VLAN and gateway checks. Works from SNMP data alone until the first backup. |
+| Templates | `config_mgmt/templates.py` + `templates/*/*.j2` | Jinja2 `SandboxedEnvironment` + `StrictUndefined`. Each template has a Pydantic model (`extra="forbid"`, regex host names, VLAN 2–4094, IPs parsed with `ipaddress`, no newlines in text). The UI form is generated from the same model's JSON schema. |
+| Changes | `services/changes.py`, `api/changes.py` | State machine with atomic transitions (`find_one_and_update` on the expected state). Four-eyes approval. The denylist runs at preview, submit and approve. Changes with secrets are refused. |
+
+**Job signing.** At approval the backend decrypts the agent's key and signs the job:
+HMAC-SHA256 over change id, device, management IP, vendor, the exact commands and their
+SHA-256, the config fingerprint it was approved against, the protected interfaces and the
+expiry time. The agent checks the signature first. An attacker who can only write to the
+database (stolen Atlas password) can't change the commands of an approved job, or approve a
+job themselves, without the agent key. The end-to-end run shows this: a job edited in MongoDB
+was refused with `bad_signature` before the agent connected to anything.
+
+**Frontend**: `Configuration` (scores, backups, unconfigured devices), `DeviceConfig`
+(findings with "Create change from fix", version list, masked text, side-by-side diff that
+scrolls inside its own box on phones), `Changes`, `ChangeNew` (template form generated from the
+JSON schema, or raw commands; dry-run preview) and `ChangeDetail` (commands, approval, agent
+log, timeline). Config text is always rendered as text, never HTML.
+
 ## MongoDB indexes
 | Collection | Index | Why |
 |---|---|---|
@@ -237,6 +293,8 @@ in `pages.css`. After that: no console errors or CSP violations in light, dark o
 | mac_entries | `(device_id, if_index, mac, vlan)` unique, `(mac, last_seen)`, `last_seen` TTL (7 days) | where a MAC is now; old sightings expire |
 | mac_addresses | `mac` unique, `first_seen`, `pending_check` (sparse) | every MAC ever seen: "never seen before" means not in here |
 | notifications | `(alert_key, at)`, `(status, at)`, `at` TTL (7 days) | cooldown, hourly cap, delivery log |
+| configs | `(device_id, version)` unique | one row per version; the app prunes to 50 per device (no TTL: a device that never changes keeps its only backup) |
+| change_requests | `(agent_id, status, approved_at)`, `(device_id, created_at)`, `(status, created_at)` | the agent's job queue, oldest approved first; per-device and per-status lists |
 | login_attempts | `(ip, at)`, `at` TTL | per-IP login rate limit that survives restarts |
 | agent_nonces | `(agent_id, nonce)` unique, TTL 10 min | replay protection: a nonce works once |
 | audit_log | `at`, `(action, at)`, `(actor.username, at)` | fast newest-first and filtered reads |

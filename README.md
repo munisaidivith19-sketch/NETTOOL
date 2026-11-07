@@ -4,7 +4,7 @@ AI-assisted network mapping, IP address management and monitoring for small and 
 organizations (colleges, hospitals, SMEs). See `CLAUDE.md` for the full brief and security rules,
 and `PHASE_PROMPTS.md` for the build plan.
 
-**Status: Phase 5 done.** The backend has accounts, roles, sessions, CSRF protection, an audit
+**Status: Phase 6 done.** The backend has accounts, roles, sessions, CSRF protection, an audit
 log and HMAC-signed agent authentication (see `docs/auth-design.md`). The agent discovers the
 network: it pings ranges, polls devices over SNMPv3 (system info, interfaces, IPv4/IPv6
 addresses, ARP and IPv6 neighbours), detects the vendor and sends a signed report that the
@@ -16,8 +16,14 @@ acknowledge/resolve, and admin pages for users, agents and the audit log. Phase 
 network map: LLDP/CDP neighbours become links on an interactive topology page, switch MAC
 tables answer "which switch port is this PC on?", interface counters become traffic rates,
 and the backend raises device-down, uplink-down and new-unknown-device alerts and sends them
-by Telegram or e-mail. A simulated five-device campus lets you run everything without any
-hardware.
+by Telegram or e-mail. Phase 6 adds configuration management. The agent backs up Cisco IOS
+and MikroTik configs over SSH. Its SSH logins sit in an encrypted file that never leaves the
+agent. Passwords and keys are masked before upload. The dashboard shows version history with a
+side-by-side diff, a compliance score with a suggested fix for each finding, and a flag for
+devices still at factory settings. Changes follow a safe path: template or own commands →
+dry-run preview → denylist check → approval by a second person → the agent pushes with an
+automatic rollback timer → verify → done or rolled back. A simulated six-device campus (SNMP
+plus a fake Cisco SSH server) lets you run everything without any hardware.
 
 ```
 agent/     runs inside the private network; discovers and polls devices (Python)
@@ -25,7 +31,7 @@ backend/   FastAPI API + serves the built React app (deployed to Render)
 frontend/  React + Vite dashboard
 docs/      architecture, known limitations (security docs arrive in Phase 8)
 lab/       GNS3 notes and sample device configs (later phases)
-templates/ Jinja2 device config templates (Phase 6)
+templates/ Jinja2 device config templates (cisco_ios/, mikrotik_routeros/)
 ```
 
 ## Requirements (Windows 11, no Docker)
@@ -81,6 +87,19 @@ Main API routes:
 - `GET /api/devices/{id}/metrics?if_index=&hours=` (any role): traffic history of an uplink or
   IP interface (7 days kept)
 - `GET /api/admin/notifications`, `POST /api/admin/notifications/test` (admin)
+- Configuration (Phase 6):
+  - `GET /api/configs` and `GET /api/devices/{id}/compliance` (any role): last backup,
+    compliance score and findings, "unconfigured" flag. No config text.
+  - `GET /api/devices/{id}/configs`, `/configs/{version}`, `/configs/diff?from=&to=`
+    (engineer or admin): version list, masked config text, side-by-side diff
+  - `POST /api/devices/{id}/configs/backup-now` (engineer or admin)
+- Change requests (read: any role; write: engineer or admin):
+  - `GET /api/templates`: templates with the JSON schema of their variables
+  - `POST /api/changes/preview` (dry run), `POST /api/changes`, `PUT /api/changes/{id}`,
+    `GET /api/changes`, `GET /api/changes/{id}`
+  - `POST /api/changes/{id}/submit`, `/approve`, `/reject`, `/cancel`
+- `/api/agent/backup-targets`, `/api/agent/configs`, `/api/agent/jobs/claim`,
+  `/api/agent/jobs/{id}/status` (signed agent requests only)
 
 IPAM settings in `.env` (all optional): `IP_STALE_DAYS=30` (an address not seen for this long
 counts as free again, unless reserved), `DUPLICATE_IP_WINDOW_MINUTES=60` (two MACs for one IP
@@ -138,6 +157,38 @@ The SNMP credentials stay in the agent's `.env` and are never sent to the backen
 only talks HTTPS; `http://` is accepted only for `127.0.0.1`/`localhost` when
 `ALLOW_INSECURE_LOCAL=true`.
 
+### SSH logins, config backups and changes
+SSH usernames and passwords are kept in an encrypted file on the agent machine
+(`credentials.enc`, Fernet). They are never sent to the backend, the database or the logs.
+```powershell
+python -m netmap_agent.credential_store init      # creates the file + its key
+python -m netmap_agent.credential_store add --name core --match 10.0.10.0/24 --device-type cisco_ios --username netmap
+python -m netmap_agent.credential_store list      # never prints passwords
+python -m netmap_agent.credential_store test 10.0.10.2   # log in once and report the result
+```
+`add` asks for the password and enable secret without echoing them. `--match` takes an IP or
+a CIDR; the most specific match wins. The file's key is `CREDENTIAL_STORE_KEY` from `.env`. If
+that is empty, the key goes in a `.key` file next to it, protected with Windows DPAPI, so only
+this Windows user can unlock it. Set `SSH_KNOWN_HOSTS_FILE` to an OpenSSH known_hosts file so
+the agent refuses a device whose SSH host key changed.
+
+Besides discovery, the agent now:
+- backs up every device it has a login for, once a day (`CONFIG_BACKUP_INTERVAL_SECONDS`).
+  Secrets are masked before upload. A version is uploaded only when its fingerprint changed.
+- every minute (`JOB_POLL_INTERVAL_SECONDS`), handles "Back up now" requests and picks up
+  approved changes. Each change is checked again on the agent (signature, expiry, denylist,
+  device unchanged since approval). It is pushed with `configure terminal revert timer 5`
+  (Cisco) or safe mode (MikroTik), then verified with a ping and a new SSH login. If the check
+  passes the agent confirms and saves; if not, it rolls back.
+
+**Change flow:** an engineer creates a change from a template (baseline, VLAN, access port)
+or from their own commands. **Preview** shows exactly what will be pushed and any blocked
+lines. They submit it, and **a different** engineer or admin approves it. An admin can approve
+their own change only with a written reason, which is audit-logged. The agent pushes it within
+a minute. The change page shows each step on a timeline, plus the agent's log. A rollback
+raises a critical alert. A change may not contain passwords or keys, because it would be
+stored; set those on the device directly.
+
 ### Simulated network (no lab needed)
 `agent/simulation/` describes a small campus. Each device listens on its own loopback address,
 port 1161:
@@ -149,6 +200,7 @@ port 1161:
 | ACCESS-SW-1 | 127.0.0.13 | HP switch |
 | ACCESS-SW-2 | 127.0.0.14 | MikroTik switch |
 | AP-1-LIBRARY | 127.0.0.15 | Aruba access point |
+| Switch | 127.0.0.16 | Cisco switch, still at factory settings |
 
 It has staff, lab and printer VLANs, IPv6 on two of them, and about 30 ARP/neighbour entries.
 The edge router and core switch see each other with CDP; the core sees both access switches
@@ -160,10 +212,23 @@ The devices are [snmpsim](https://github.com/lextudio/snmpsim) responders speaki
 authPriv (SHA + AES).
 ```powershell
 cd agent
-python -m simulation.run_simulation        # terminal 1: starts all five, Ctrl+C stops them
+python -m simulation.run_simulation        # terminal 1: starts all six, Ctrl+C stops them
 python -m netmap_agent.main --once         # terminal 2, with the simulation block of
                                            # .env.example copied into .env
 ```
+For backups and changes, also start the fake Cisco SSH server. It serves EDGE-RTR-1 (with
+deliberate weaknesses: Telnet, community `public`), CORE-SW-1 (hardened) and the factory-new
+Switch, on port 2222:
+```powershell
+python -m simulation.ssh_sim               # terminal 3; writes simulation/ssh_known_hosts
+python -m simulation.setup_credentials     # once: puts the lab logins in the encrypted store
+```
+Then set `SSH_KNOWN_HOSTS_FILE=simulation/ssh_known_hosts` and
+`CHANGE_REVERT_SECONDS_PER_MINUTE=12` in `.env`. The simulator runs one revert-timer
+"minute" in 12 seconds. Try it: open **Configuration → Switch → Create baseline change**,
+preview it, submit, approve it as a second user, then run the agent. To watch a rollback,
+start the SSH server with `--break-after-push`. It then refuses new logins after a push, the
+agent's check fails, and the change is undone.
 To run only some devices, name them: `python -m simulation.run_simulation core-switch ap-1`.
 A device that stops answering SNMP shows as `snmp_error` on the next cycle, because its
 loopback address still answers ping. On a real network a powered-off device shows as `down`.
@@ -183,7 +248,7 @@ Run the backend at the same time and sign in with the admin account.
 ```powershell
 cd frontend
 npm run build      # writes frontend/dist
-cd ..ackend
+cd ..\backend
 uvicorn app.main:app   # now http://127.0.0.1:8000 serves the app and the API
 ```
 The backend serves `frontend/dist` when it exists (`FRONTEND_DIST` overrides the path). Any
@@ -193,7 +258,9 @@ non-API path returns the app, so links like `/ip/subnets/<id>` work after a relo
 | Page | Who |
 |---|---|
 | Dashboard (auto-refresh 30 s), Devices, IP addresses, Alerts, Topology | everyone |
+| Configuration (scores, findings, unconfigured devices), Changes (read) | everyone |
 | Add/edit/delete subnets, reserve/release IPs, acknowledge/resolve alerts | engineer, admin |
+| Config text and diffs, Back up now, create/approve/reject change requests | engineer, admin |
 | Users, Agents (key shown once), Notifications, Audit log | admin |
 
 On **Topology**, type an IP, MAC or host name into "Find which port a device is on": NetMap

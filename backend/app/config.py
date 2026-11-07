@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     # Monitoring (Phase 5). New-MAC alerts start this many hours after the first MAC table
     # arrives; until then every MAC counts as part of the existing network.
     new_mac_learning_hours: int = Field(default=24, ge=0, le=24 * 30)
+    # Phase 6: folder with the Jinja2 device templates (default: <repo>/templates).
+    templates_dir: str = ""
 
     # Notifications (Phase 5), sent by the backend. A channel with missing settings is off.
     notify_min_severity: Literal["info", "warning", "critical"] = "warning"
@@ -89,6 +91,12 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.env == "production"
+
+    @property
+    def templates_path(self) -> Path:
+        from app.config_mgmt.templates import DEFAULT_TEMPLATES_DIR
+
+        return Path(self.templates_dir) if self.templates_dir else DEFAULT_TEMPLATES_DIR
 
 
 @lru_cache

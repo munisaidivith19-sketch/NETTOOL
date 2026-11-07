@@ -1,0 +1,9 @@
+{#- Add a VLAN, optionally with a routed interface (SVI). -#}
+vlan {{ vlan_id }}
+ name {{ name }}
+{% if svi_address %}
+interface Vlan{{ vlan_id }}
+ description {{ name }}
+ ip address {{ svi_address }} {{ svi_netmask }}
+ no shutdown
+{% endif %}

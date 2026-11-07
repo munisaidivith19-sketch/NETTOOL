@@ -1,5 +1,5 @@
 # Agent runtime dependencies, pinned. Python 3.10: pydantic-settings held at the last 3.10 release.
-# Netmiko + ciscoconfparse2 are added in Phase 6; scikit-learn + Prophet in Phase 7.
+# scikit-learn + Prophet are added in Phase 7.
 pysnmp==7.1.31
 # Needed by pysnmp for SNMPv3 privacy (AES); also used for the credential store in Phase 6.
 cryptography==50.0.2
@@ -8,3 +8,6 @@ pydantic==2.14.3
 pydantic-settings==2.15.0
 APScheduler==3.11.3
 python-dotenv==1.2.4
+# Phase 6: SSH config backup / push (pulls in paramiko 5.1.0) and the IOS denylist parser.
+netmiko==4.8.0
+ciscoconfparse2==0.9.18

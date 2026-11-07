@@ -11,7 +11,8 @@ const NAV = [
   { to: "/ip", label: "IP addresses" },
   { to: "/alerts", label: "Alerts" },
   { to: "/topology", label: "Topology" },
-  { label: "Configuration", soon: true }, // Phase 6
+  { to: "/config", label: "Configuration" },
+  { to: "/changes", label: "Changes" },
 ];
 
 const ADMIN_NAV = [

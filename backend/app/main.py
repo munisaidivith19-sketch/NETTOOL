@@ -13,11 +13,14 @@ from fastapi.responses import JSONResponse
 
 from app import db
 from app.api import (
+    agent_config,
     agent_ingest,
     agents,
     alerts,
     audit,
     auth,
+    changes,
+    configs,
     dashboard,
     devices,
     ips,
@@ -40,7 +43,8 @@ logger = logging.getLogger("netmap")
 API_ROUTERS = (
     auth.router, users.router, agents.router, audit.router, agent_ingest.router,
     subnets.router, ips.router, alerts.router, devices.router, dashboard.router,
-    topology.router, notifications.router,
+    topology.router, notifications.router, configs.router, changes.router,
+    agent_config.router,
 )
 
 

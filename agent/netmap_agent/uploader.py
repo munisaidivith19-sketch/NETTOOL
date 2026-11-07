@@ -108,3 +108,15 @@ class Uploader:
 
     def send_report(self, report: dict) -> dict:
         return self.request("POST", "/api/agent/report", report)
+
+    def backup_targets(self) -> list[dict]:
+        return self.request("GET", "/api/agent/backup-targets").get("devices", [])
+
+    def send_config(self, payload: dict) -> dict:
+        return self.request("POST", "/api/agent/configs", payload)
+
+    def claim_job(self) -> dict | None:
+        return self.request("POST", "/api/agent/jobs/claim", {}).get("job")
+
+    def job_status(self, change_id: str, payload: dict) -> dict:
+        return self.request("POST", f"/api/agent/jobs/{change_id}/status", payload)

@@ -21,7 +21,10 @@ These have fixes only in versions that **require Python 3.11+**, so they cannot 
 | dnspython 2.8.0 | backend runtime (pulled in by pymongo) | CVE-2026-114605: a crafted DNS message can make name decompression use excessive CPU | **Low.** pymongo only uses dnspython to resolve the `mongodb+srv://` SRV/TXT records of our own Atlas cluster through the system resolver. Exploiting it needs a malicious DNS resolver or an on-path attacker answering those lookups, and the impact is CPU use (DoS), not code execution. Not used at all with a plain `mongodb://` URI. |
 | filelock 4.1.0 | **dev only** (pulled in by pip-audit's cache) | 17 CVEs (CVE-2026-1129xx) in lock-file handling: symlink races, ACL/mode handling, stale-lock eviction | **Very low.** Not installed on Render. Only reachable by a local attacker on the developer's own machine, during `pip-audit` runs. |
 
-The agent's runtime dependencies had no known vulnerabilities at Phase 0 or Phase 2.
+| dnspython 2.8.0 | agent runtime (Phase 6, pulled in by ciscoconfparse2; also in the backend) | the same CVE | **Very low.** ciscoconfparse2 imports dnspython for optional DNS helper functions that NetMap never calls. The agent and backend parse configs only; no DNS messages are processed through it. |
+
+The agent's runtime dependencies had no known vulnerabilities at Phase 0 or Phase 2. In
+Phase 6 the only finding is the dnspython one above.
 `snmpsim` and `pysmi` (the simulator) are dev-only.
 
 ## Phase 1 (authentication)
@@ -106,3 +109,43 @@ The agent's runtime dependencies had no known vulnerabilities at Phase 0 or Phas
   thousands of alerts; the rest are recorded as seen without an alert.
 - **No traffic charts yet.** The device page shows the latest rates; the metrics API returns
   history, and charts are planned with the AI forecasting work in Phase 7.
+
+## Phase 6 (configuration backup, compliance and changes)
+- **MikroTik push is tested only against a fake connection.** Backup, masking, compliance and
+  the safe-mode flow (Ctrl+X to enter, Ctrl+X to commit, Ctrl+D to undo) follow RouterOS
+  documentation, but they have not been verified on a real CHR. Test on a lab CHR first.
+- **Cisco automatic rollback needs `archive`.** `configure terminal revert timer` only works
+  with an archive path. The baseline template adds the `archive` block first, and the agent
+  refuses other changes on a device without it (`archive_missing`). On devices whose flash
+  is full or read-only, the archive itself can fail.
+- **The fake IOS SSH server is a demo, not IOS.** It knows enough commands for NetMap's flow.
+  Real devices can answer differently: other prompts, `--More--` paging when
+  `terminal length 0` fails, or slower revert. Netmiko handles most of this, but test every
+  new platform in the lab.
+- **Compliance rules are heuristics over the masked text.** They parse the config the way an
+  engineer reads it, not the way IOS executes it. Examples: an access-class that blocks
+  Telnet still counts as "Telnet enabled"; an "unused" port is one that is down right now; an
+  interface range written with macros is not expanded. Each finding shows the reason, so you
+  can judge it.
+- **Unconfigured detection is a guess.** "Default host name", "no VLANs besides 1" and "no
+  static management IP" are typical factory signs. A device with an IP on a routed port
+  counts as a router, which needs no VLANs or default gateway. A small office switch that
+  really uses only VLAN 1 and DHCP will be flagged.
+- **Without `SSH_KNOWN_HOSTS_FILE`, host keys are accepted automatically** (trust on every
+  use). Anyone who can take over a device's IP could then capture the SSH password. Set the
+  file in production. With it, a changed key stops backups (`host_key_rejected`).
+- **MikroTik `/export` hides secrets by default**, so a RouterOS password-only change does not
+  change the fingerprint. `/export show-sensitive` would include them, but then they would
+  pass through the agent's memory and masking unnecessarily.
+- **Secrets can't be pushed through a change request.** Any line that masking would alter
+  (password, secret, community, key) is refused, because the change text is stored and shown
+  for approval. Set or rotate secrets on the device directly; the next backup records that a
+  secret changed (masked) and raises a "changed outside NetMap" alert.
+- **Jobs run one after another, at most 5 per poll.** A change waits for the agent's next poll (up
+  to `JOB_POLL_INTERVAL_SECONDS`). An approved job expires after 24 hours. A job claimed by
+  an agent that then dies is marked `failed` (`agent_timeout`) after 30 minutes; if the push
+  did happen, the device's revert timer has undone it.
+- **The approved-against config must still be current.** If the device changed between
+  approval and push (someone typed on the CLI), the agent refuses with `config_changed`. The
+  change must be re-created and approved against the new config.
+- **Config history keeps the last 50 versions per device.** Older versions are deleted.

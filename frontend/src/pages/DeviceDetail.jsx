@@ -29,6 +29,9 @@ export default function DeviceDetail() {
   return (
     <>
       <PageHead title={d ? d.sys_name || d.mgmt_ip : "Device"}>
+        <Link to={`/devices/${id}/config`} className="text-link">
+          Configuration and compliance
+        </Link>
         <Link to="/devices" className="text-link">
           All devices
         </Link>

@@ -792,3 +792,215 @@
     height: 380px;
   }
 }
+
+/* Phase 6: configuration, compliance and change requests */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+}
+
+.stat-big {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+.finding-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.finding {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.finding p {
+  margin: 0;
+}
+
+.finding > .button {
+  justify-self: start;
+}
+
+.finding-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.finding summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.finding details[open] summary {
+  margin-bottom: var(--space-2);
+}
+
+.violations {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
+}
+
+.violations code {
+  font-family: var(--font-addr);
+  overflow-wrap: anywhere;
+}
+
+.config-view {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.config-view h3,
+.preview h3 {
+  margin: 0;
+  font-size: var(--text-base);
+}
+
+/* Long configs scroll inside their box instead of stretching the page. */
+.config-text {
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.code-input {
+  font-family: var(--font-addr);
+  font-size: var(--text-sm);
+}
+
+.preview {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  grid-column: 1 / -1;
+}
+
+.segmented legend {
+  padding: 0 var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.segmented label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.change-form > .field:has(textarea),
+.change-form > .small {
+  grid-column: 1 / -1;
+}
+
+.timeline {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0 0 0 var(--space-4);
+  border-left: 2px solid var(--line);
+  list-style: none;
+}
+
+.timeline li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.timeline li > div {
+  flex-basis: 100%;
+}
+
+/* Side-by-side diff: two columns; on a phone the box scrolls sideways, not the page. */
+.diff {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-addr);
+  font-size: var(--text-sm);
+}
+
+.diff-row {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
+  min-width: 560px;
+}
+
+.diff-cell {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 1px var(--space-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff-cell + .diff-cell {
+  border-left: 1px solid var(--line);
+}
+
+.diff-cell code {
+  font: inherit;
+}
+
+.diff-head {
+  background: var(--panel-sunken);
+  font-family: var(--font-ui);
+  font-weight: 600;
+}
+
+.diff-no {
+  flex: 0 0 3.5ch;
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+}
+
+.diff-mark {
+  flex: 0 0 1ch;
+  font-weight: 700;
+  user-select: none;
+}
+
+.diff-added .diff-cell:last-child,
+.diff-changed .diff-cell:last-child {
+  background: color-mix(in srgb, var(--up) 14%, transparent);
+}
+
+.diff-removed .diff-cell:first-child,
+.diff-changed .diff-cell:first-child {
+  background: color-mix(in srgb, var(--down) 14%, transparent);
+}
+
+.diff-empty {
+  background: var(--panel-sunken);
+}
+
+.diff-skip .diff-cell {
+  grid-column: 1 / -1;
+  justify-content: center;
+  color: var(--muted);
+  font-family: var(--font-ui);
+}

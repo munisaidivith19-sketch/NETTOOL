@@ -89,6 +89,18 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("at", ASCENDING)], expireAfterSeconds=NOTIFICATIONS_TTL_SECONDS,
                    name="at_ttl"),
     ],
+    # Phase 6: config backups and change requests. Old config versions are pruned by the app
+    # (keep the newest 50 per device), not by a TTL: a device that never changes keeps its one.
+    "configs": [
+        IndexModel([("device_id", ASCENDING), ("version", DESCENDING)], unique=True,
+                   name="device_version_unique"),
+    ],
+    "change_requests": [
+        IndexModel([("agent_id", ASCENDING), ("status", ASCENDING), ("approved_at", ASCENDING)],
+                   name="agent_status"),
+        IndexModel([("device_id", ASCENDING), ("created_at", DESCENDING)], name="device_created"),
+        IndexModel([("status", ASCENDING), ("created_at", DESCENDING)], name="status_created"),
+    ],
     "sessions": [
         # expireAfterSeconds=0: each document is deleted once its own expires_at time has passed.
         IndexModel([("expires_at", ASCENDING)], expireAfterSeconds=0, name="expires_at_ttl"),

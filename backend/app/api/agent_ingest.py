@@ -12,6 +12,7 @@ from app.security.agent_auth import CurrentAgent, require_agent
 from app.security.sessions import utcnow
 from app.services import audit, notify
 from app.services.alerts import run_ipam_checks, run_monitoring_checks
+from app.services.configs import refresh_unconfigured
 from app.services.ingest import ingest_report
 
 router = APIRouter(prefix="/api/agent", tags=["agent"], dependencies=[Depends(require_agent)])
@@ -43,6 +44,8 @@ async def report(
     # re-evaluated right here.
     summary |= await run_ipam_checks(db, settings, now)
     summary |= await run_monitoring_checks(db, settings, now)
+    # Devices without a config backup: "unconfigured" from SNMP data alone (Phase 6).
+    summary["unconfigured_devices"] = await refresh_unconfigured(db, agent.id, now)
     # Telegram / e-mail after the response is sent: the agent never waits on them.
     background.add_task(notify.dispatch_pending, db, settings)
     await db.agents.update_one(

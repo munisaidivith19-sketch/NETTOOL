@@ -10,8 +10,13 @@ import AuditLog from "./pages/admin/AuditLog.jsx";
 import Notifications from "./pages/admin/Notifications.jsx";
 import Users from "./pages/admin/Users.jsx";
 import Alerts from "./pages/Alerts.jsx";
+import ChangeDetail from "./pages/ChangeDetail.jsx";
+import ChangeNew from "./pages/ChangeNew.jsx";
 import ChangePassword from "./pages/ChangePassword.jsx";
+import Changes from "./pages/Changes.jsx";
+import Configuration from "./pages/Configuration.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
+import DeviceConfig from "./pages/DeviceConfig.jsx";
 import DeviceDetail from "./pages/DeviceDetail.jsx";
 import Devices from "./pages/Devices.jsx";
 import IpDetail from "./pages/IpDetail.jsx";
@@ -70,6 +75,11 @@ export default function App() {
           <Route index element={<Dashboard />} />
           <Route path="devices" element={<Devices />} />
           <Route path="devices/:id" element={<DeviceDetail />} />
+          <Route path="devices/:id/config" element={<DeviceConfig />} />
+          <Route path="config" element={<Configuration />} />
+          <Route path="changes" element={<Changes />} />
+          <Route path="changes/new" element={<ChangeNew />} />
+          <Route path="changes/:id" element={<ChangeDetail />} />
           <Route path="ip" element={<Subnets />} />
           <Route path="ip/search" element={<IpSearch />} />
           <Route path="ip/subnets/:id" element={<SubnetDetail />} />

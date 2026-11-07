@@ -100,4 +100,6 @@ export const ALERT_TYPES = {
   new_mac: "New device (MAC)",
   anomaly: "Anomaly",
   compliance: "Compliance",
+  config_changed: "Config changed",
+  change_failed: "Change failed",
 };

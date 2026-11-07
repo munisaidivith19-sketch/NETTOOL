@@ -9,3 +9,7 @@ bcrypt==5.0.0
 cryptography==50.0.2
 httpx==0.28.1
 python-dotenv==1.2.4
+# Phase 6: change templates (sandboxed) and the IOS denylist / compliance parser.
+# ciscoconfparse2 is imported only when a change or a config is checked (~38 MB of RAM).
+jinja2==3.1.6
+ciscoconfparse2==0.9.18
