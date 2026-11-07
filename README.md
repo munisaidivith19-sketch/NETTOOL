@@ -4,8 +4,9 @@ AI-assisted network mapping, IP address management and monitoring for small and 
 organizations (colleges, hospitals, SMEs). See `CLAUDE.md` for the full brief and security rules,
 and `PHASE_PROMPTS.md` for the build plan.
 
-**Status: Phase 0 (project setup).** The backend reports its own health, the agent and
-frontend are skeletons, and tests pass. Features start in Phase 1.
+**Status: Phase 1 done.** The backend has accounts, roles, sessions, CSRF protection, an audit
+log and HMAC-signed agent authentication (see `docs/auth-design.md`). The dashboard UI comes in
+Phase 4; until then use the API (`/docs` in development).
 
 ```
 agent/     runs inside the private network; discovers and polls devices (Python)
@@ -37,9 +38,21 @@ cd backend
 py -3.10 -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements-dev.txt     # Render installs requirements.txt only
-copy .env.example .env                  # then edit .env
+copy .env.example .env                  # then edit .env (see below)
 uvicorn app.main:app --reload
 ```
+In `.env`, set at least:
+- `AGENT_KEY_ENCRYPTION_KEY`. Required; the backend refuses to start without it. Generate one
+  with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+- `ADMIN_USERNAME` and `ADMIN_PASSWORD`. These create the first admin when the database has no
+  users. Log in with them, change the password when asked, then delete both lines.
+
+Main API routes:
+- `/api/auth/login`, `/logout`, `/me`, `/change-password`
+- `/api/users` and `/api/agents` (admin)
+- `/api/audit` (admin)
+- `/api/agent/heartbeat` (signed agent requests)
+
 Open http://127.0.0.1:8000/health. It returns `{"status":"ok","database":"ok"}`, or HTTP 503
 with `"database":"unavailable"` if MongoDB is not reachable. API docs are at `/docs` in
 development and switched off when `ENV=production`.

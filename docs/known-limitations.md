@@ -23,6 +23,21 @@ These have fixes only in versions that **require Python 3.11+**, so they cannot 
 
 The agent's runtime dependencies had no known vulnerabilities at Phase 0.
 
+## Phase 1 (authentication)
+- **Client IP behind a proxy.** Rate limiting and the audit log use the connecting address. On
+  Render that is Render's proxy, not the real client, until Phase 9 adds trusted-proxy handling
+  (`uvicorn --proxy-headers --forwarded-allow-ips`). Until then the per-IP limit would apply to
+  all users together in production.
+- **Account lockout can be abused** to lock a known username for 15 minutes (a small denial of
+  service). This is the usual trade-off of lockouts; the per-IP limit slows it down, and MFA in
+  Phase 8 reduces the value of guessing anyway.
+- **`AGENT_KEY_ENCRYPTION_KEY` is a single point of failure.** If it leaks together with the
+  database, agent keys can be decrypted. If it is lost, every agent needs a new key. Keep it only
+  in the Render environment and your local `.env`.
+- **The `Secure` cookie on http://localhost** works in Chrome, Edge and Firefox, which treat
+  localhost as secure, but not in Safari. Use one of the first three for local development.
+- **No TOTP MFA yet** (Phase 8).
+
 ## Other
 - The UI has been checked by automated tests and a production build only. No visual review in
   a browser has been done yet.

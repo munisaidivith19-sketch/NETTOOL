@@ -127,9 +127,15 @@ Unique index on `ip_addresses.ip_key`. Send IPv6 sizes to the browser as strings
 
 ## 6. MongoDB collections
 `users, sessions, agents, devices, interfaces, subnets, ip_addresses, arp_entries, mac_entries,
-links, configs, change_requests, alerts, metrics, predictions, audit_log`
+links, configs, change_requests, alerts, metrics, predictions, audit_log, login_attempts,
+agent_nonces`
 - Indexes: `devices.mgmt_ip` unique, `ip_addresses.ip_key` unique, `subnets.network` unique,
-  `alerts.key` unique, `users.username` unique, TTL on `metrics.ts` (7 days) and `sessions.expires_at`.
+  `alerts.key` unique, `users.username` unique, TTL on `metrics.ts` (7 days) and `sessions.expires_at`,
+  `sessions.token_hash` unique, `agent_nonces (agent_id, nonce)` unique + TTL 10 min,
+  `login_attempts.at` TTL. Index list lives in `backend/app/db.py`.
+- Every API router is listed in `API_ROUTERS` in `backend/app/main.py`; tests/test_rbac.py checks
+  each route has an access dependency. Path-param patterns go inside `Path(...)` (see
+  `models/common.py`), not on an Annotated alias with a separate `= Path()`.
 - Use `tz_aware=True` and store all times in UTC.
 
 ## 7. SECURITY REQUIREMENTS (mandatory in every phase)
@@ -157,7 +163,10 @@ conflicts with them, stop and ask.
 
 ### 7.3 Agent ↔ backend security
 - Each agent has its own API key: 32 random bytes (`secrets.token_urlsafe`), shown **once**,
-  stored only as a SHA-256 hash, revocable from the admin UI.
+  revocable from the admin UI. It is stored **Fernet-encrypted** under the server-only env var
+  `AGENT_KEY_ENCRYPTION_KEY` plus a SHA-256 fingerprint (owner decision 2026-11-07: a hash can't
+  verify an HMAC, and a DB leak alone must not allow forging agent requests). The key itself is
+  never sent over the network; see docs/auth-design.md.
 - Every agent request is **HMAC-SHA256 signed** over `method + path + timestamp + nonce + body`
   with headers `X-Agent-Id`, `X-Timestamp`, `X-Nonce`, `X-Signature`. Reject if the timestamp is
   more than 5 minutes off or the nonce was used before (replay protection).

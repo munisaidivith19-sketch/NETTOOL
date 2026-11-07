@@ -29,6 +29,11 @@
 | `agent/netmap_agent/config.py` | Agent settings; CIDR ranges validated; keys are `SecretStr` |
 | `frontend/` | App shell, light/dark theme tokens, Overview page polling `/health` |
 
+## Added in Phase 1
+Accounts, roles, server-side sessions, CSRF protection, login rate limiting and lockout,
+security headers, the audit log, admin user management, and agent keys with HMAC-signed
+requests. Design and reasoning: `docs/auth-design.md`.
+
 ## MongoDB indexes
 | Collection | Index | Why |
 |---|---|---|
@@ -39,6 +44,9 @@
 | users | `username` unique | |
 | sessions | `token_hash` unique, `expires_at` TTL (0 s) | sessions vanish when they expire |
 | metrics | `ts` TTL (7 days) | keeps the free-tier database small |
+| login_attempts | `(ip, at)`, `at` TTL | per-IP login rate limit that survives restarts |
+| agent_nonces | `(agent_id, nonce)` unique, TTL 10 min | replay protection: a nonce works once |
+| audit_log | `at`, `(action, at)`, `(actor.username, at)` | fast newest-first and filtered reads |
 
 ## Frontend design notes
 - Concept: a patch panel. Cool neutral surfaces, so status colours are the only loud thing.

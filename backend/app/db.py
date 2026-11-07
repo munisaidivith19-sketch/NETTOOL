@@ -3,12 +3,15 @@
 The same code works for local MongoDB and MongoDB Atlas; only MONGODB_URI changes.
 """
 
-from pymongo import ASCENDING, AsyncMongoClient, IndexModel
+from pymongo import ASCENDING, DESCENDING, AsyncMongoClient, IndexModel
 from pymongo.asynchronous.database import AsyncDatabase
 
 from app.config import Settings
+from app.security.agent_auth import NONCE_TTL_SECONDS
+from app.security.rate_limit import IP_WINDOW
 
 METRICS_TTL_SECONDS = 7 * 24 * 60 * 60
+LOGIN_ATTEMPTS_TTL_SECONDS = int(IP_WINDOW.total_seconds()) * 3
 
 # CLAUDE.md section 6. Unique indexes are what actually stop duplicates (e.g. two records for the
 # same IP); TTL indexes make MongoDB delete old metrics and expired sessions on its own.
@@ -25,6 +28,24 @@ INDEXES: dict[str, list[IndexModel]] = {
         # expireAfterSeconds=0: each document is deleted once its own expires_at time has passed.
         IndexModel([("expires_at", ASCENDING)], expireAfterSeconds=0, name="expires_at_ttl"),
         IndexModel([("token_hash", ASCENDING)], unique=True, name="token_hash_unique"),
+        IndexModel([("user_id", ASCENDING)], name="user_id"),
+    ],
+    "login_attempts": [
+        IndexModel([("ip", ASCENDING), ("at", DESCENDING)], name="ip_at"),
+        IndexModel([("at", ASCENDING)], expireAfterSeconds=LOGIN_ATTEMPTS_TTL_SECONDS,
+                   name="at_ttl"),
+    ],
+    "agent_nonces": [
+        # The unique pair is the replay protection: a second insert of the same nonce fails.
+        IndexModel([("agent_id", ASCENDING), ("nonce", ASCENDING)], unique=True,
+                   name="agent_nonce_unique"),
+        IndexModel([("created_at", ASCENDING)], expireAfterSeconds=NONCE_TTL_SECONDS,
+                   name="created_at_ttl"),
+    ],
+    "audit_log": [
+        IndexModel([("at", DESCENDING)], name="at_desc"),
+        IndexModel([("action", ASCENDING), ("at", DESCENDING)], name="action_at"),
+        IndexModel([("actor.username", ASCENDING), ("at", DESCENDING)], name="actor_at"),
     ],
 }
 
