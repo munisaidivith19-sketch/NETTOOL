@@ -18,6 +18,7 @@
   --up: #1b7f47;
   --down: #c02626;
   --warn: #93600f;
+  --scrim: rgb(13 19 24 / 0.55); /* behind dialogs */
 
   --font-ui: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
   --font-addr: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", monospace;
@@ -58,6 +59,7 @@
     --up: #4cc38a;
     --down: #f07068;
     --warn: #e3b04f;
+    --scrim: rgb(0 0 0 / 0.65);
   }
 }
 
@@ -74,4 +76,5 @@
   --up: #4cc38a;
   --down: #f07068;
   --warn: #e3b04f;
+  --scrim: rgb(0 0 0 / 0.65);
 }

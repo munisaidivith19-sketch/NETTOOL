@@ -12,8 +12,20 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app import db
-from app.api import agent_ingest, agents, alerts, audit, auth, ips, subnets, users
+from app.api import (
+    agent_ingest,
+    agents,
+    alerts,
+    audit,
+    auth,
+    dashboard,
+    devices,
+    ips,
+    subnets,
+    users,
+)
 from app.config import Settings, get_settings
+from app.frontend import mount_frontend
 from app.security.agent_auth import KeyVault
 from app.security.csrf import OriginAndContentTypeMiddleware
 from app.security.http import BodySizeLimitMiddleware, SecurityMiddleware
@@ -25,7 +37,7 @@ logger = logging.getLogger("netmap")
 # rule and also checks that no other /api route exists in the app.
 API_ROUTERS = (
     auth.router, users.router, agents.router, audit.router, agent_ingest.router,
-    subnets.router, ips.router, alerts.router,
+    subnets.router, ips.router, alerts.router, devices.router, dashboard.router,
 )
 
 
@@ -96,6 +108,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse({"status": "ok", "database": "ok"})
         return JSONResponse({"status": "degraded", "database": "unavailable"}, status_code=503)
 
+    # Last, so its catch-all route never shadows /api, /health or /docs.
+    if not mount_frontend(app, settings.frontend_dist):
+        logger.info("No frontend build found; serving the API only")
     return app
 
 

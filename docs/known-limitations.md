@@ -60,8 +60,6 @@ The agent's runtime dependencies had no known vulnerabilities at Phase 0 or Phas
 - **Alerts are only re-checked when data arrives** (agent report or IPAM change), because
   Render has no background worker. If the agent stops reporting, a duplicate-IP alert stays
   open until the next report, even after the window has passed.
-- **Alerts can't be acknowledged or resolved by hand yet.** The API is read-only; the actions
-  come with the alerts page in Phase 4.
 - **Deleting a discovered subnet is temporary.** The next agent report creates it again
   (without the manual name/VLAN/gateway). Delete is meant for manual subnets.
 - **Subnet usage is computed on each request** (one indexed count per subnet). Fine for a few
@@ -71,6 +69,14 @@ The agent's runtime dependencies had no known vulnerabilities at Phase 0 or Phas
   gratuitous-ARP detection are not done.
 - **No IP history.** Only first/last seen per address and the current reservation are kept.
 
-## Other
-- The UI has been checked by automated tests and a production build only. No visual review in
-  a browser has been done yet.
+## Phase 4 (dashboard)
+- **Polling, not push.** The dashboard and alert counter refresh every 30 seconds; there are
+  no WebSockets (Render's free tier sleeps, and polling keeps the backend simple).
+- **A reload keeps you signed in, but a second tab shares the session.** Signing out in one
+  tab signs out all of them; the other tabs notice on their next request.
+- **Lists are capped, not paged**, except the subnet IP table and the audit log: devices
+  (1,000), subnets (1,000), alerts (500), search results (200).
+- **Light mode was not visually re-checked in Phase 4.** The headless Edge run followed the
+  OS dark theme. Light mode uses the same tokens as dark, so it should match, but no one has
+  looked at it on these pages.
+- **No end-to-end test runs in CI**; the headless browser script lives outside the repo.

@@ -43,7 +43,10 @@ async def upsert_alert(db: AsyncDatabase, *, key: str, type_: str, severity: str
     update: dict = {"$set": {"message": message, "target": target, "details": details,
                              "severity": severity, "last_seen": now}}
     if existing["status"] != "open":
-        update["$set"] |= {"status": "open", "opened_at": now, "resolved_at": None}
+        # A reopened alert is a new occurrence: an old acknowledgement no longer applies.
+        update["$set"] |= {"status": "open", "opened_at": now, "resolved_at": None,
+                           "resolved_by": None, "acknowledged_by": None,
+                           "acknowledged_at": None}
         update["$inc"] = {"occurrences": 1}
         result = "reopened"
     else:
@@ -56,7 +59,7 @@ async def resolve_missing(db: AsyncDatabase, type_: str, active_keys: set[str],
                           now: datetime) -> int:
     result = await db.alerts.update_many(
         {"type": type_, "status": "open", "key": {"$nin": sorted(active_keys)}},
-        {"$set": {"status": "resolved", "resolved_at": now}},
+        {"$set": {"status": "resolved", "resolved_at": now, "resolved_by": None}},
     )
     return result.modified_count
 

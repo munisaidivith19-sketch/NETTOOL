@@ -30,6 +30,7 @@ def _access_labels(dependant) -> set[str]:
 
 def _concrete(path: str) -> str:
     sample = {"user_id": "0" * 24, "agent_id": "agt_" + "0" * 16, "subnet_id": "0" * 24,
+              "device_id": "0" * 24, "alert_id": "0" * 24,
               "ip": "10.0.0.1"}
     return re.sub(r"\{(\w+)\}", lambda m: sample.get(m.group(1), "x"), path)
 

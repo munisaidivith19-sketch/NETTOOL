@@ -135,12 +135,53 @@ and after every IPAM change.
 **Audit.** `subnet.create` / `subnet.update` / `subnet.delete`, `ip.reserve` and `ip.release`
 are recorded, including refused attempts with the reason (`overlap`, `in_use`, `gateway`, ...).
 
+## Added in Phase 4: the dashboard
+Code: `frontend/src/` (React 19, React Router 7, plain CSS with the tokens in
+`styles/tokens.css`), plus backend routes for devices, alert actions, the dashboard summary and
+serving the build (`backend/app/frontend.py`).
+
+```
+ browser ──same origin──► FastAPI
+   │  /assets/*   hashed JS/CSS/fonts (cached 1 year)
+   │  /api/*      JSON API (session cookie + X-CSRF-Token on writes)
+   │  /health
+   └  anything else → index.html (React Router decides the page)
+```
+
+**How the browser side stays safe**
+| Rule | Where |
+|---|---|
+| Session only in the httpOnly cookie; JavaScript can't read it | backend `security/sessions.py` |
+| CSRF token kept in a module variable (memory), sent as `X-CSRF-Token` on POST/PATCH/DELETE; never in localStorage | `src/api/client.js` |
+| 401 anywhere → token dropped, login page with "session expired" | `client.js` + `auth/AuthProvider.jsx` |
+| 403 `password_change_required` → forced change screen, nothing else reachable | `App.jsx` |
+| No `dangerouslySetInnerHTML`; device names, sysDescr, alert messages and audit details are plain text | all pages; a test renders `<img onerror>` text |
+| Strict CSP (`'self'` only, no inline scripts or styles): usage bars are native `<meter>`, Vite never inlines assets as `data:` URIs | `components/ui.jsx`, `vite.config.js` |
+| Role-based hiding is cosmetic; the server enforces | `auth/permissions.js` mirrors `require_role(...)` |
+| IPv6 counts arrive as strings and are formatted with `BigInt`, never `Number` | `src/format.js` |
+
+The agent key dialog can't be closed with Escape or a close button: the admin has to tick
+"I have stored the key safely". The key exists only in React state while the dialog is open.
+
+**New backend routes**: `GET /api/devices` (search by name, IP, subnet, vendor or location;
+filters built from parsed values, text `re.escape`d), `GET /api/devices/{id}` (interfaces and
+addresses), `POST /api/alerts/{id}/acknowledge|resolve` (engineer+, audit-logged, atomic
+"only if still open" update), `GET /api/dashboard/summary` (one request feeds both the
+dashboard and the top bar's alert counter). A manually resolved alert whose problem still
+exists reopens at the next check, with the acknowledgement cleared.
+
+**Browser check.** The built app was driven in headless Edge (DevTools protocol) through
+login, every page, reserve, overlap error, agent key, user creation, forced password change,
+dark mode and phone width, while recording console errors, exceptions and CSP violations. It
+caught one real problem: Vite had inlined a small font as a `data:` URI, which the CSP
+blocked. Fixed with `assetsInlineLimit: 0` instead of loosening the CSP.
+
 ## MongoDB indexes
 | Collection | Index | Why |
 |---|---|---|
 | devices | `mgmt_ip` unique, `status`, `(agent_id, mgmt_ip_key)` | one record per managed device; status filters; known-devices list |
 | interfaces | `(device_id, if_index)` unique | one row per interface |
-| ip_addresses | `ip_key` unique, `mac`, `reservation.hostname` (sparse) | the database itself refuses a duplicate IP record or reservation; IP-by-MAC and host-name lookups |
+| ip_addresses | `ip_key` unique, `mac`, `reservation.hostname` (sparse), `device_id` (sparse) | the database itself refuses a duplicate IP record or reservation; IP-by-MAC and host-name lookups |
 | arp_entries | `(ip_key, mac, device_id)` unique, `mac`, `last_seen` | duplicate-IP detection, newest first |
 | subnets | `network` unique, `(version, start_key, end_key)` | no duplicate subnets; overlap and "which subnet holds this IP" lookups |
 | alerts | `key` unique, `(status, type, last_seen)` | the same alert is updated, not re-created; open-alert lists |

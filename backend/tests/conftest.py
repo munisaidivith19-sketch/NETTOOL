@@ -37,6 +37,8 @@ def make_settings(**overrides) -> Settings:
         "agent_key_encryption_key": TEST_VAULT_KEY,
         # Low cost only so the suite runs fast; Settings refuses this outside ENV=test.
         "bcrypt_rounds": 4,
+        # API only, so a local frontend build never changes test results.
+        "frontend_dist": None,
     }
     values.update(overrides)
     if values["env"] != "test" and "bcrypt_rounds" not in overrides:

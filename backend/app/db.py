@@ -29,6 +29,7 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("ip_key", ASCENDING)], unique=True, name="ip_key_unique"),
         IndexModel([("mac", ASCENDING)], name="mac"),
         IndexModel([("reservation.hostname", ASCENDING)], sparse=True, name="reservation_host"),
+        IndexModel([("device_id", ASCENDING)], sparse=True, name="device"),  # device detail page
     ],
     "subnets": [
         IndexModel([("network", ASCENDING)], unique=True, name="network_unique"),

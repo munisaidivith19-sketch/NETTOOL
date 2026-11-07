@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { getHealth } from "../api/client.js";
-import StatusMark from "../components/StatusMark.jsx";
+import StatusMark from "./StatusMark.jsx";
 
 const REFRESH_MS = 30_000;
 
 const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-export default function Overview() {
+export default function HealthPanel() {
   const [health, setHealth] = useState({ api: "unknown", database: "unknown" });
   const [checkedAt, setCheckedAt] = useState(null);
   const [checking, setChecking] = useState(true);

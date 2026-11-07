@@ -15,6 +15,9 @@ export default defineConfig({
   },
   build: {
     sourcemap: false,
+    // Never inline small files as data: URIs. The CSP allows fonts and scripts from 'self'
+    // only, so an inlined font subset was blocked (found by the Phase 4 browser check).
+    assetsInlineLimit: 0,
   },
   test: {
     environment: "jsdom",

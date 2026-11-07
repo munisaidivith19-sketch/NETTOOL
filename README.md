@@ -4,15 +4,16 @@ AI-assisted network mapping, IP address management and monitoring for small and 
 organizations (colleges, hospitals, SMEs). See `CLAUDE.md` for the full brief and security rules,
 and `PHASE_PROMPTS.md` for the build plan.
 
-**Status: Phase 3 done.** The backend has accounts, roles, sessions, CSRF protection, an audit
+**Status: Phase 4 done.** The backend has accounts, roles, sessions, CSRF protection, an audit
 log and HMAC-signed agent authentication (see `docs/auth-design.md`). The agent discovers the
 network: it pings ranges, polls devices over SNMPv3 (system info, interfaces, IPv4/IPv6
 addresses, ARP and IPv6 neighbours), detects the vendor and sends a signed report that the
 backend stores. On top of that data the backend does IP address management: subnet usage for
 IPv4 and IPv6, next free IP, reservations that can never collide, IP → MAC → device lookup,
-duplicate-IP and "subnet over 80 % full" alerts. A simulated five-device campus lets you run
-all of it without any hardware. The dashboard UI comes in Phase 4; until then use the API
-(`/docs` in development).
+duplicate-IP and "subnet over 80 % full" alerts. The React dashboard covers all of it: sign-in
+(with the forced first password change), dashboard, devices, IP management, alerts with
+acknowledge/resolve, and admin pages for users, agents and the audit log. A simulated
+five-device campus lets you run everything without any hardware.
 
 ```
 agent/     runs inside the private network; discovers and polls devices (Python)
@@ -66,7 +67,11 @@ Main API routes:
   - `GET /api/ips/search?q=` (IP, CIDR, MAC in any common format, or host name),
     `GET /api/ips/{ip}` (IP → MAC → device → interface)
   - `POST /api/ips/reservations`, `DELETE /api/ips/reservations/{ip}`
-- `GET /api/alerts?status=open|resolved&type=` (any role)
+- `GET /api/alerts?status=open|resolved|all&type=` (any role);
+  `POST /api/alerts/{id}/acknowledge` and `/resolve` (engineer or admin)
+- `GET /api/devices?q=&status=`, `GET /api/devices/{id}` (any role)
+- `GET /api/dashboard/summary` (any role): device counts, fullest subnets, open alerts, last
+  agent check-in
 
 IPAM settings in `.env` (all optional): `IP_STALE_DAYS=30` (an address not seen for this long
 counts as free again, unless reserved), `DUPLICATE_IP_WINDOW_MINUTES=60` (two MACs for one IP
@@ -133,12 +138,33 @@ The data files in `simulation/data/` are generated from `simulation/topology.py`
 `python -m simulation.build_snmprec`; a test checks that the committed files match.
 
 ## 4. Frontend
+**Development** (hot reload):
 ```powershell
 cd frontend
 npm install
 npm run dev        # http://localhost:5173, forwards /api and /health to the backend on :8000
 ```
-Run the backend at the same time. The Overview page shows backend and database status.
+Run the backend at the same time and sign in with the admin account.
+
+**Like production** (one origin, the way Render runs it):
+```powershell
+cd frontend
+npm run build      # writes frontend/dist
+cd ..ackend
+uvicorn app.main:app   # now http://127.0.0.1:8000 serves the app and the API
+```
+The backend serves `frontend/dist` when it exists (`FRONTEND_DIST` overrides the path). Any
+non-API path returns the app, so links like `/ip/subnets/<id>` work after a reload; unknown
+`/api/...` paths stay JSON 404s.
+
+| Page | Who |
+|---|---|
+| Dashboard (auto-refresh 30 s), Devices, IP addresses, Alerts | everyone |
+| Add/edit/delete subnets, reserve/release IPs, acknowledge/resolve alerts | engineer, admin |
+| Users, Agents (key shown once), Audit log | admin |
+
+Buttons a role can't use are hidden, but that is only convenience: the backend checks the
+role on every request.
 
 ## Tests and checks
 | Part | Command (inside the folder, venv active) |

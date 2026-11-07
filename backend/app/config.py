@@ -5,6 +5,7 @@ not settings, so a wrong environment variable can't quietly weaken them.
 """
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
@@ -38,6 +39,10 @@ class Settings(BaseSettings):
     # Two MACs seen for one IP within this window = a duplicate IP.
     duplicate_ip_window_minutes: int = Field(default=60, ge=5, le=10080)
     subnet_usage_alert_percent: int = Field(default=80, ge=50, le=100)
+
+    # The built React app (npm run build), served from the same origin as the API. None, or a
+    # folder without index.html, means API only (in development Vite serves the UI instead).
+    frontend_dist: Path | None = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
     @model_validator(mode="after")
     def check_bcrypt_rounds(self) -> "Settings":

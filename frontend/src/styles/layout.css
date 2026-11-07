@@ -1,4 +1,4 @@
-/* App shell: fixed sidebar on wide screens, top bar + collapsible menu on phones. */
+/* App shell: fixed sidebar on wide screens; a header with a Menu button on phones. */
 .shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
@@ -15,6 +15,14 @@
   padding: var(--space-6) var(--space-4);
   background: var(--panel);
   border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
 }
 
 .wordmark {
@@ -24,10 +32,37 @@
   font-size: var(--text-md);
   font-weight: 700;
   letter-spacing: -0.01em;
+  color: var(--ink);
+  text-decoration: none;
 }
 
 .wordmark svg {
   color: var(--accent);
+}
+
+.menu-button {
+  display: none;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.nav-groups {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.nav-heading {
+  margin: var(--space-4) 0 0;
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .nav-list {
@@ -78,21 +113,90 @@
   margin-top: auto;
 }
 
+.workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  min-height: 60px;
+  padding: var(--space-2) var(--space-8);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.user-name {
+  font-weight: 600;
+}
+
+.topbar-link {
+  color: var(--accent);
+}
+
+.alert-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 36px;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+.alert-counter svg {
+  color: var(--warn);
+}
+
+.alert-counter-critical {
+  border-color: var(--down);
+}
+
+.alert-counter-critical svg {
+  color: var(--down);
+}
+
 .main {
   min-width: 0;
-  padding: var(--space-6) var(--space-8);
+  padding: var(--space-6) var(--space-8) var(--space-8);
+  display: grid;
+  gap: var(--space-4);
+  align-content: start;
 }
 
 .page-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: var(--space-4);
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-2);
 }
 
 .page-head h1 {
   font-size: var(--text-xl);
+  overflow-wrap: anywhere;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
 }
 
 .theme-toggle {
@@ -111,6 +215,33 @@
   border-color: var(--muted);
 }
 
+/* Login and forced password change: one centred card, no navigation. */
+.auth-screen {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: var(--space-4);
+}
+
+.auth-card {
+  display: grid;
+  gap: var(--space-4);
+  width: min(100%, 400px);
+  padding: var(--space-6);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.auth-card h1 {
+  font-size: var(--text-lg);
+}
+
+.auth-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
 @media (max-width: 760px) {
   .shell {
     grid-template-columns: minmax(0, 1fr);
@@ -125,19 +256,24 @@
     border-bottom: 1px solid var(--line);
   }
 
-  .nav-list {
-    display: flex;
-    overflow-x: auto;
-    gap: var(--space-1);
+  .menu-button {
+    display: inline-flex;
+    align-items: center;
   }
 
-  .nav-link {
-    white-space: nowrap;
-  }
-
-  .nav-note,
-  .sidebar-foot {
+  /* Phone: the nav is hidden until Menu is pressed. */
+  .sidebar:not([data-open]) .nav-groups,
+  .sidebar:not([data-open]) .sidebar-foot {
     display: none;
+  }
+
+  .sidebar-foot {
+    margin-top: 0;
+  }
+
+  .topbar {
+    justify-content: flex-start;
+    padding: var(--space-2) var(--space-4);
   }
 
   .main {

@@ -141,4 +141,7 @@ class AlertOut(BaseModel):
     opened_at: datetime
     last_seen: datetime
     resolved_at: datetime | None = None
+    resolved_by: str | None = None  # set only when a person resolved it
+    acknowledged_by: str | None = None
+    acknowledged_at: datetime | None = None
     occurrences: int
