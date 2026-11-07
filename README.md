@@ -4,12 +4,15 @@ AI-assisted network mapping, IP address management and monitoring for small and 
 organizations (colleges, hospitals, SMEs). See `CLAUDE.md` for the full brief and security rules,
 and `PHASE_PROMPTS.md` for the build plan.
 
-**Status: Phase 2 done.** The backend has accounts, roles, sessions, CSRF protection, an audit
+**Status: Phase 3 done.** The backend has accounts, roles, sessions, CSRF protection, an audit
 log and HMAC-signed agent authentication (see `docs/auth-design.md`). The agent discovers the
 network: it pings ranges, polls devices over SNMPv3 (system info, interfaces, IPv4/IPv6
 addresses, ARP and IPv6 neighbours), detects the vendor and sends a signed report that the
-backend stores. A simulated five-device campus lets you run all of it without any hardware.
-The dashboard UI comes in Phase 4; until then use the API (`/docs` in development).
+backend stores. On top of that data the backend does IP address management: subnet usage for
+IPv4 and IPv6, next free IP, reservations that can never collide, IP → MAC → device lookup,
+duplicate-IP and "subnet over 80 % full" alerts. A simulated five-device campus lets you run
+all of it without any hardware. The dashboard UI comes in Phase 4; until then use the API
+(`/docs` in development).
 
 ```
 agent/     runs inside the private network; discovers and polls devices (Python)
@@ -56,6 +59,18 @@ Main API routes:
 - `/api/audit` (admin)
 - `/api/agent/heartbeat`, `/api/agent/report`, `/api/agent/known-devices` (signed agent
   requests only; a user session is not accepted there)
+- IPAM (read: any role; change: engineer or admin):
+  - `GET/POST /api/subnets`, `GET/PATCH/DELETE /api/subnets/{id}`: usage, manual subnets,
+    overlap check
+  - `GET /api/subnets/{id}/ips?limit=&after=` (IP table, paged) and `/next-free`
+  - `GET /api/ips/search?q=` (IP, CIDR, MAC in any common format, or host name),
+    `GET /api/ips/{ip}` (IP → MAC → device → interface)
+  - `POST /api/ips/reservations`, `DELETE /api/ips/reservations/{ip}`
+- `GET /api/alerts?status=open|resolved&type=` (any role)
+
+IPAM settings in `.env` (all optional): `IP_STALE_DAYS=30` (an address not seen for this long
+counts as free again, unless reserved), `DUPLICATE_IP_WINDOW_MINUTES=60` (two MACs for one IP
+inside this window = duplicate IP), `SUBNET_USAGE_ALERT_PERCENT=80`.
 
 Open http://127.0.0.1:8000/health. It returns `{"status":"ok","database":"ok"}`, or HTTP 503
 with `"database":"unavailable"` if MongoDB is not reachable. API docs are at `/docs` in

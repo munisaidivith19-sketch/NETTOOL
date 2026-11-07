@@ -33,6 +33,12 @@ class Settings(BaseSettings):
 
     bcrypt_rounds: int = Field(default=MIN_BCRYPT_ROUNDS, ge=4, le=15)
 
+    # IPAM (Phase 3). An IP not seen for IP_STALE_DAYS counts as free again (unless reserved).
+    ip_stale_days: int = Field(default=30, ge=1, le=365)
+    # Two MACs seen for one IP within this window = a duplicate IP.
+    duplicate_ip_window_minutes: int = Field(default=60, ge=5, le=10080)
+    subnet_usage_alert_percent: int = Field(default=80, ge=50, le=100)
+
     @model_validator(mode="after")
     def check_bcrypt_rounds(self) -> "Settings":
         # Low cost factors exist only to keep the test suite fast. Anywhere else they would make

@@ -28,8 +28,14 @@ INDEXES: dict[str, list[IndexModel]] = {
     "ip_addresses": [
         IndexModel([("ip_key", ASCENDING)], unique=True, name="ip_key_unique"),
         IndexModel([("mac", ASCENDING)], name="mac"),
+        IndexModel([("reservation.hostname", ASCENDING)], sparse=True, name="reservation_host"),
     ],
-    "subnets": [IndexModel([("network", ASCENDING)], unique=True, name="network_unique")],
+    "subnets": [
+        IndexModel([("network", ASCENDING)], unique=True, name="network_unique"),
+        # Overlap and "which subnet contains this IP" lookups (services/ipam.py).
+        IndexModel([("version", ASCENDING), ("start_key", ASCENDING), ("end_key", ASCENDING)],
+                   name="version_range"),
+    ],
     "arp_entries": [
         # One row per (IP, MAC, reporting device); two MACs on one IP = a duplicate IP (Phase 3).
         IndexModel([("ip_key", ASCENDING), ("mac", ASCENDING), ("device_id", ASCENDING)],
@@ -37,7 +43,11 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("mac", ASCENDING)], name="mac"),
         IndexModel([("last_seen", DESCENDING)], name="last_seen_desc"),
     ],
-    "alerts": [IndexModel([("key", ASCENDING)], unique=True, name="key_unique")],
+    "alerts": [
+        IndexModel([("key", ASCENDING)], unique=True, name="key_unique"),
+        IndexModel([("status", ASCENDING), ("type", ASCENDING), ("last_seen", DESCENDING)],
+                   name="status_type_seen"),
+    ],
     "users": [IndexModel([("username", ASCENDING)], unique=True, name="username_unique")],
     "metrics": [
         IndexModel([("ts", ASCENDING)], expireAfterSeconds=METRICS_TTL_SECONDS, name="ts_ttl"),

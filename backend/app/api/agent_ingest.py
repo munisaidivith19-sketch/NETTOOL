@@ -11,6 +11,7 @@ from app.models.report import MAX_DEVICES, DiscoveryReport, KnownDevice
 from app.security.agent_auth import CurrentAgent, require_agent
 from app.security.sessions import utcnow
 from app.services import audit
+from app.services.alerts import run_ipam_checks
 from app.services.ingest import ingest_report
 
 router = APIRouter(prefix="/api/agent", tags=["agent"], dependencies=[Depends(require_agent)])
@@ -36,6 +37,9 @@ async def report(
     db = request.app.state.db
     now = utcnow()
     summary = await ingest_report(db, agent.id, body, now)
+    # New data is the only trigger on Render (no background scheduler), so alerts are
+    # re-evaluated right here.
+    summary |= await run_ipam_checks(db, request.app.state.settings, now)
     await db.agents.update_one(
         {"_id": agent.id},
         {"$set": {"last_seen_at": now, "last_seen_ip": audit.client_ip(request),

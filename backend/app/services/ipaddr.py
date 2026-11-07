@@ -17,6 +17,12 @@ def ip_key(address: str | IPAddress) -> str:
     return f"{addr.version}:{int(addr):032x}"
 
 
+def key_to_ip(key: str) -> IPAddress:
+    version, _, value = key.partition(":")
+    number = int(value, 16)
+    return ipaddress.IPv4Address(number) if version == "4" else ipaddress.IPv6Address(number)
+
+
 def network_key_range(network: str | IPNetwork) -> tuple[str, str]:
     """(first, last) ip_key of a network, inclusive of the network and broadcast addresses."""
     net = ipaddress.ip_network(network, strict=False)

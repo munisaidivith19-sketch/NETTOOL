@@ -23,3 +23,6 @@ PasswordInput = Annotated[str, StringConstraints(min_length=1, max_length=256)]
 # through (caught by tests/test_users.py::test_bad_user_id_rejected).
 UserIdPath = Annotated[str, Path(pattern=r"^[a-f0-9]{24}$")]
 AgentIdPath = Annotated[str, Path(pattern=r"^agt_[a-f0-9]{16}$")]
+ObjectIdPath = Annotated[str, Path(pattern=r"^[a-f0-9]{24}$")]
+# Characters of an IPv4 or IPv6 address only; ipaddress does the real check afterwards.
+IpPath = Annotated[str, Path(pattern=r"^[0-9A-Fa-f.:]{2,45}$")]

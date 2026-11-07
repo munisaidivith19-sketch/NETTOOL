@@ -77,15 +77,73 @@ record.
 socket, and every other device in the cycle timed out. The end-to-end run found this, and a
 regression test now covers it.
 
+## Added in Phase 3: IP address management
+Code: `services/ipam.py` (maths and rules), `services/alerts.py` (alert lifecycle),
+`api/subnets.py`, `api/ips.py`, `api/alerts.py`, `models/ipam.py`.
+
+**Storing addresses so MongoDB can sort and range-query them.** MongoDB has no IP type, so
+every address is stored as `ip_key = "<version>:<32 hex digits>"`, e.g. `10.0.0.1` →
+`4:0000…0a000001`. Fixed-width hex sorts as text in the same order as the numbers, so "every
+IP in 10.10.10.0/24" is one index range scan (`ip_key` between the network key and the
+broadcast key). It works the same for IPv6, and IPv4 always sorts before IPv6. Each subnet also
+stores `start_key` / `end_key`.
+
+**Usage maths.** All arithmetic uses Python integers, which are exact even for IPv6.
+| Subnet | Usable addresses |
+|---|---|
+| IPv4 /0–/30 | all except the network and broadcast address |
+| IPv4 /31, /32 | all (point-to-point, RFC 3021) |
+| IPv6 | all except the subnet-router anycast address (`::0` of the prefix, RFC 4291); there is no broadcast |
+
+An address counts as **used** if it is reserved or was seen (interface, ARP or ping) in the
+last `IP_STALE_DAYS`. Older ones show as `stale` and count as free. Sizes go to the browser as
+strings: a /64 holds 2^64 addresses, far beyond JavaScript's safe integer range (2^53).
+
+**Overlap detection.** Two ranges overlap when `a.start <= b.end` and `a.end >= b.start`. With
+the stored keys that is one indexed query (`version`, `start_key`, `end_key`). A new manual
+subnet that overlaps any existing one (manual or discovered) is refused with 409. CIDR blocks
+can't overlap partially: one either contains the other or they are disjoint.
+
+**Next free IP.** Walk the sorted list of taken things (gateway, reserved ranges, used IPs)
+and return the first gap. The cost depends on how many addresses are taken, not on the
+subnet size, so a /64 answers instantly.
+
+**Reservations can't be duplicated.** A reservation is refused when the IP is outside every
+known subnet, is the network/broadcast/anycast address, is the gateway, is already reserved,
+or was seen recently. Two requests racing for the same free IP can't both win: the unique
+index on `ip_addresses.ip_key` lets only one insert succeed, and reserving a stale record is a
+conditional update that matches nothing if the record changed in between. A test fires two
+real app instances at the same IP at the same moment.
+
+**Search.** `q` is classified by parsing: an IP, a CIDR, a MAC (colon, dash, Cisco dotted or
+bare hex), or else a host-name fragment. The query is built from the parsed value, never from
+the raw text. Host-name text is limited to safe characters and `re.escape`d, so `.*` or `$ne`
+can't widen a query.
+
+**Alerts with a stable key.** One problem = one alert document, guaranteed by the unique
+`alerts.key` index:
+| Alert | Key | Opens when | Resolves when |
+|---|---|---|---|
+| duplicate IP (critical) | `duplicate_ip:<ip_key>` | `arp_entries` shows 2+ different MACs for one IP within `DUPLICATE_IP_WINDOW_MINUTES` | only one MAC is left in the window |
+| subnet usage (warning; critical at 95 %) | `subnet_usage:<network>` | used ≥ `SUBNET_USAGE_ALERT_PERCENT` | used < threshold − 5 (hysteresis, so it doesn't flap at 80 %) |
+
+A problem that comes back reopens the same alert and counts `occurrences`. Point-to-point
+subnets (fewer than 6 usable addresses) are full by design and never alert. Render has no
+background scheduler, so the checks run whenever new data arrives: after every agent report
+and after every IPAM change.
+
+**Audit.** `subnet.create` / `subnet.update` / `subnet.delete`, `ip.reserve` and `ip.release`
+are recorded, including refused attempts with the reason (`overlap`, `in_use`, `gateway`, ...).
+
 ## MongoDB indexes
 | Collection | Index | Why |
 |---|---|---|
 | devices | `mgmt_ip` unique, `status`, `(agent_id, mgmt_ip_key)` | one record per managed device; status filters; known-devices list |
 | interfaces | `(device_id, if_index)` unique | one row per interface |
-| ip_addresses | `ip_key` unique, `mac` | the database itself refuses a duplicate IP record; IP-by-MAC lookups |
+| ip_addresses | `ip_key` unique, `mac`, `reservation.hostname` (sparse) | the database itself refuses a duplicate IP record or reservation; IP-by-MAC and host-name lookups |
 | arp_entries | `(ip_key, mac, device_id)` unique, `mac`, `last_seen` | duplicate-IP detection, newest first |
-| subnets | `network` unique | no duplicate subnets |
-| alerts | `key` unique | the same alert is updated, not re-created |
+| subnets | `network` unique, `(version, start_key, end_key)` | no duplicate subnets; overlap and "which subnet holds this IP" lookups |
+| alerts | `key` unique, `(status, type, last_seen)` | the same alert is updated, not re-created; open-alert lists |
 | users | `username` unique | |
 | sessions | `token_hash` unique, `expires_at` TTL (0 s) | sessions vanish when they expire |
 | metrics | `ts` TTL (7 days) | keeps the free-tier database small |

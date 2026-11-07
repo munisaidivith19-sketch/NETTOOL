@@ -46,8 +46,8 @@ The agent's runtime dependencies had no known vulnerabilities at Phase 0 or Phas
 - **Devices are identified by management IP.** A device polled through two different
   addresses becomes two records. Merging by serial number or chassis MAC is not done yet.
 - **No switch-port mapping yet.** We know IP to MAC (from ARP) but not yet MAC to switch port
-  (BRIDGE-MIB forwarding table), and there are no LLDP/CDP neighbours. Both come with
-  IPAM/topology in later phases.
+  (BRIDGE-MIB forwarding table), and there are no LLDP/CDP neighbours. Both come in Phase 5;
+  until then `GET /api/ips/{ip}` returns `"switch_port": null`.
 - **Ping sweep is capped** at 1,024 addresses per range and 4,096 in total, and uses one OS
   `ping` process per address (32 at a time). Larger networks need several agents or ranges
   that change between cycles.
@@ -55,6 +55,21 @@ The agent's runtime dependencies had no known vulnerabilities at Phase 0 or Phas
   every address answers ping, so a stopped simulated device shows `snmp_error`, never `down`.
 - **Two agents polling the same device** both update it; the last report wins.
 - **Interfaces that disappear** from a device's table are deleted, not kept as history.
+
+## Phase 3 (IPAM)
+- **Alerts are only re-checked when data arrives** (agent report or IPAM change), because
+  Render has no background worker. If the agent stops reporting, a duplicate-IP alert stays
+  open until the next report, even after the window has passed.
+- **Alerts can't be acknowledged or resolved by hand yet.** The API is read-only; the actions
+  come with the alerts page in Phase 4.
+- **Deleting a discovered subnet is temporary.** The next agent report creates it again
+  (without the manual name/VLAN/gateway). Delete is meant for manual subnets.
+- **Subnet usage is computed on each request** (one indexed count per subnet). Fine for a few
+  hundred subnets; thousands would need cached counters.
+- **Duplicate detection needs both MACs in ARP tables.** Two hosts fighting over one IP are
+  only caught if a polled router or switch has seen both within the window. Rogue DHCP and
+  gratuitous-ARP detection are not done.
+- **No IP history.** Only first/last seen per address and the current reservation are kept.
 
 ## Other
 - The UI has been checked by automated tests and a production build only. No visual review in

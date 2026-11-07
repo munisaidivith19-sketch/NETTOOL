@@ -12,7 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app import db
-from app.api import agent_ingest, agents, audit, auth, users
+from app.api import agent_ingest, agents, alerts, audit, auth, ips, subnets, users
 from app.config import Settings, get_settings
 from app.security.agent_auth import KeyVault
 from app.security.csrf import OriginAndContentTypeMiddleware
@@ -23,7 +23,10 @@ logger = logging.getLogger("netmap")
 
 # Every API router, in one place. tests/test_rbac.py checks each route in these for an access
 # rule and also checks that no other /api route exists in the app.
-API_ROUTERS = (auth.router, users.router, agents.router, audit.router, agent_ingest.router)
+API_ROUTERS = (
+    auth.router, users.router, agents.router, audit.router, agent_ingest.router,
+    subnets.router, ips.router, alerts.router,
+)
 
 
 async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
