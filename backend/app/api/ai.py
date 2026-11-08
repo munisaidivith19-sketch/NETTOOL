@@ -52,6 +52,12 @@ async def ai_status(request: Request) -> dict:
 @router.post("/ask")
 async def ask(body: AskRequest, request: Request,
               user: CurrentUser = Depends(require_user)) -> dict:
+    if request.app.state.settings.is_production and not request.app.state.ai_readonly_user:
+        # CLAUDE.md 7.9: queries built from free text run only as the read-only database user.
+        # Without it, Ask NetMap is off rather than falling back to the read-write user.
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, {
+            "message": "Ask NetMap is turned off: the read-only database user "
+                       "(AI_MONGODB_URI) is not configured."})
     await _rate_limit(request, user)
     db = request.app.state.db
 

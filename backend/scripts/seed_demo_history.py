@@ -35,8 +35,9 @@ STEP = timedelta(minutes=5)
 
 
 def rng_for(text: str) -> random.Random:
-    # Same input → same history, so repeated runs give the same demo.
-    return random.Random(int(hashlib.sha256(text.encode()).hexdigest()[:8], 16))  # noqa: S311
+    # Same input → same history, so repeated runs give the same demo. Demo data, not a secret,
+    # so a predictable generator is what we want here.
+    return random.Random(int(hashlib.sha256(text.encode()).hexdigest()[:8], 16))  # noqa: S311  # nosec B311
 
 
 def seed_usage(db, now: datetime) -> int:

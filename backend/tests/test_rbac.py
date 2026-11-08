@@ -74,31 +74,57 @@ def test_only_login_is_public():
     assert public == PUBLIC_ROUTES
 
 
+def test_only_mfa_verify_uses_the_challenge_cookie():
+    """The second sign-in step is reachable with the 5-minute challenge cookie instead of a
+    session; nothing else may accept that cookie."""
+    routes = {
+        (method, route.path)
+        for method, route in _api_routes()
+        if "mfa_challenge" in _access_labels(route.dependant)
+    }
+    assert routes == {("POST", "/api/auth/mfa/verify")}
+
+
 @pytest.mark.parametrize(("method", "path"), [r for r in ROUTES if r not in PUBLIC_ROUTES])
 def test_unauthenticated_request_rejected(client, method, path):
     response = client.request(method, _concrete(path), json={})
     assert response.status_code == 401, f"{method} {path} -> {response.status_code}"
 
 
-ADMIN_ONLY = [
-    ("GET", "/api/users"),
-    ("POST", "/api/users"),
-    ("PATCH", "/api/users/" + "0" * 24),
-    ("POST", "/api/users/" + "0" * 24 + "/reset-password"),
-    ("GET", "/api/agents"),
-    ("POST", "/api/agents"),
-    ("POST", "/api/agents/agt_" + "0" * 16 + "/revoke"),
-    ("GET", "/api/audit"),
-]
+def _allowed_roles(route) -> set[str] | None:
+    """Roles the route's markers allow (every roles: label must pass), or None if the route
+    isn't role-based (public, agent, session, MFA challenge)."""
+    allowed = None
+    for label in _access_labels(route.dependant):
+        if label.startswith("roles:"):
+            roles = set(label.removeprefix("roles:").split(","))
+            allowed = roles if allowed is None else allowed & roles
+    return allowed
 
 
-@pytest.mark.parametrize("role", ["viewer", "engineer"])
-@pytest.mark.parametrize(("method", "path"), ADMIN_ONLY)
-def test_non_admins_get_403_on_admin_routes(client, sync_db, role, method, path):
+# Built from the routes themselves, so a new route is covered without editing this file.
+FORBIDDEN = sorted(
+    (method, route.path, role)
+    for method, route in _api_routes()
+    if (allowed := _allowed_roles(route)) is not None
+    for role in ("viewer", "engineer", "admin")
+    if role not in allowed
+)
+
+
+def test_matrix_is_not_empty():
+    assert ("GET", "/api/users", "viewer") in FORBIDDEN
+    assert ("POST", "/api/subnets", "viewer") in FORBIDDEN
+    assert not any(role == "admin" for _, _, role in FORBIDDEN)
+
+
+@pytest.mark.parametrize(("method", "path", "role"), FORBIDDEN)
+def test_role_matrix_every_route(client, sync_db, method, path, role):
+    """Every role a route doesn't allow gets 403 (CLAUDE.md 7.2, checked on the server)."""
     add_user(sync_db, "someone", role)
     token = login(client, "someone")
-    response = client.request(method, path, json={}, headers=csrf(token))
-    assert response.status_code == 403
+    response = client.request(method, _concrete(path), json={}, headers=csrf(token))
+    assert response.status_code == 403, f"{role}: {method} {path} -> {response.status_code}"
 
 
 def test_admin_can_use_admin_routes(client, admin):

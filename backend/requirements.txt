@@ -13,3 +13,7 @@ python-dotenv==1.2.4
 # ciscoconfparse2 is imported only when a change or a config is checked (~38 MB of RAM).
 jinja2==3.1.6
 ciscoconfparse2==0.9.18
+# Phase 8: TOTP two-step sign-in for admins. segno draws the setup QR code. Both are pure
+# Python with no dependencies.
+pyotp==2.10.0
+segno==1.6.6

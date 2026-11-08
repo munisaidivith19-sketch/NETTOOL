@@ -61,7 +61,8 @@ def test_wrong_key_rejected(client, agent):
     assert _beat(client, forged).status_code == 401
 
 
-@pytest.mark.parametrize("offset", [-301, 301, -3600])
+# int(time.time()) rounds down by up to 1 s, so +301 could land exactly on the 300 s limit.
+@pytest.mark.parametrize("offset", [-301, 302, -3600])
 def test_timestamp_outside_window_rejected(client, agent, offset):
     assert _beat(client, agent, timestamp=int(time.time()) + offset).status_code == 401
 

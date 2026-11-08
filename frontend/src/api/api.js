@@ -15,6 +15,16 @@ export const auth = {
     request("POST", "/api/auth/change-password", { body: { current_password, new_password } }),
 };
 
+/* Two-step sign-in (Phase 8). verify is the second sign-in step, so it runs without a session. */
+export const mfa = {
+  status: (options) => request("GET", "/api/auth/mfa", options),
+  verify: (body) => request("POST", "/api/auth/mfa/verify", { body, auth: false }),
+  setup: () => request("POST", "/api/auth/mfa/setup"),
+  enable: (code) => request("POST", "/api/auth/mfa/enable", { body: { code } }),
+  recoveryCodes: (code) => request("POST", "/api/auth/mfa/recovery-codes", { body: { code } }),
+  disable: (password, code) => request("POST", "/api/auth/mfa/disable", { body: { password, code } }),
+};
+
 export const dashboard = {
   summary: (options) => request("GET", "/api/dashboard/summary", options),
 };
@@ -64,6 +74,7 @@ export const users = {
   update: (id, body) => request("PATCH", `/api/users/${enc(id)}`, { body }),
   resetPassword: (id, new_password) =>
     request("POST", `/api/users/${enc(id)}/reset-password`, { body: { new_password } }),
+  resetMfa: (id) => request("POST", `/api/users/${enc(id)}/mfa/reset`),
 };
 
 export const agents = {

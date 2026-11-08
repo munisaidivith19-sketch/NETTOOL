@@ -7,7 +7,8 @@
  *   can read. A reload loses it; the app gets it back from GET /api/auth/me.
  * - Every state-changing request (POST/PATCH/PUT/DELETE) carries it as X-CSRF-Token.
  * - 401 means the session is gone (expired, logged out elsewhere): the app is told so it can
- *   show the login page. 403 "password_change_required" sends the user to the change screen.
+ *   show the login page. 403 "password_change_required" sends the user to the change screen,
+ *   and 403 "mfa_setup_required" (an admin without two-step sign-in) to the MFA setup screen.
  */
 
 export class ApiError extends Error {
@@ -19,7 +20,7 @@ export class ApiError extends Error {
 }
 
 let csrfToken = null;
-const handlers = { unauthorized: () => {}, passwordChangeRequired: () => {} };
+const handlers = { unauthorized: () => {}, passwordChangeRequired: () => {}, mfaSetupRequired: () => {} };
 
 export function setCsrfToken(token) {
   csrfToken = token || null;
@@ -30,10 +31,16 @@ export function hasCsrfToken() {
 }
 
 /* The auth layer registers what to do on 401 / forced password change. */
-export function setAuthHandlers({ unauthorized, passwordChangeRequired }) {
+export function setAuthHandlers({ unauthorized, passwordChangeRequired, mfaSetupRequired }) {
   if (unauthorized) handlers.unauthorized = unauthorized;
   if (passwordChangeRequired) handlers.passwordChangeRequired = passwordChangeRequired;
+  if (mfaSetupRequired) handlers.mfaSetupRequired = mfaSetupRequired;
 }
+
+const FIXED_MESSAGES = {
+  password_change_required: "You need to change your password first.",
+  mfa_setup_required: "You need to set up two-step sign-in first.",
+};
 
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
@@ -44,7 +51,7 @@ const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 export function errorMessage(status, body) {
   const detail = body?.detail;
   if (typeof detail === "string") {
-    return detail === "password_change_required" ? "You need to change your password first." : detail;
+    return FIXED_MESSAGES[detail] ?? detail;
   }
   // Some routes (Ask NetMap) send {"detail": {"message": "...", ...extra fields}}.
   if (detail && typeof detail === "object" && !Array.isArray(detail) && typeof detail.message === "string") {
@@ -98,6 +105,8 @@ export async function request(method, path, { body, query, signal, auth = true }
       handlers.unauthorized();
     } else if (response.status === 403 && data?.detail === "password_change_required") {
       handlers.passwordChangeRequired();
+    } else if (response.status === 403 && data?.detail === "mfa_setup_required") {
+      handlers.mfaSetupRequired();
     }
     throw new ApiError(response.status, data);
   }

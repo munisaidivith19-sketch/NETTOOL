@@ -4,7 +4,9 @@ Every /api route must declare exactly how it is protected, through one of:
   require_role(...)         a logged-in user with one of these roles
   require_user              any logged-in user (all three roles)
   require_session           any logged-in user, even one who must still change their password
+                            or set up two-step sign-in
   require_agent             a signed agent request (app/security/agent_auth.py)
+  require_challenge         the half-finished sign-in of the MFA code step (app/security/mfa.py)
   public                    deliberately open (only login)
 tests/test_rbac.py fails if any /api route has none of them: that is "deny by default".
 """
@@ -29,6 +31,9 @@ class CurrentUser:
     role: str
     must_change_password: bool
     session: dict = field(repr=False)
+    # Admins must use two-step sign-in (CLAUDE.md 7.1); until they set it up, only the
+    # require_session routes (me, logout, change password, MFA setup) work.
+    mfa_setup_required: bool = False
 
     @property
     def csrf_token(self) -> str:
@@ -38,6 +43,10 @@ class CurrentUser:
 def mark_access(dependency, label: str):
     setattr(dependency, ACCESS_MARKER, label)
     return dependency
+
+
+def mfa_setup_required(user: dict) -> bool:
+    return user.get("role") == "admin" and not (user.get("mfa") or {}).get("enabled")
 
 
 def _unauthorized() -> HTTPException:
@@ -59,6 +68,7 @@ async def _authenticate(request: Request) -> CurrentUser:
         role=user["role"],
         must_change_password=bool(user.get("must_change_password")),
         session=session,
+        mfa_setup_required=mfa_setup_required(user),
     )
     request.state.user = current
     # CSRF is checked for every state-changing request made with the session cookie.
@@ -91,6 +101,17 @@ def require_role(*roles: str):
                 details={"path": request.url.path},
             )
             raise HTTPException(status.HTTP_403_FORBIDDEN, "password_change_required")
+        if user.mfa_setup_required:
+            # Checked on every request, so a user promoted to admin is stopped at once.
+            await audit.record(
+                request.app.state.db,
+                request,
+                action="auth.mfa_setup_required",
+                result="denied",
+                actor=audit.user_actor(user),
+                details={"path": request.url.path},
+            )
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "mfa_setup_required")
         if user.role not in roles:
             raise HTTPException(status.HTTP_403_FORBIDDEN, "You don't have permission to do this")
         return user

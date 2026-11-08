@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { auth as authApi } from "../api/api.js";
+import { auth as authApi, mfa as mfaApi } from "../api/api.js";
 import { setAuthHandlers, setCsrfToken } from "../api/client.js";
 
 /*
@@ -9,15 +9,24 @@ import { setAuthHandlers, setCsrfToken } from "../api/client.js";
  *
  * state.status: "loading" (asking /me) | "signed-out" | "signed-in"
  * state.notice: why the user is on the login page ("expired", "signed-out") or null
+ * state.recoveryCodesLeft: set after signing in with a recovery code, for the "few left" warning
+ *
+ * Sign-in is one or two requests: login() returns { mfaRequired: true } when the account uses
+ * two-step sign-in, and verifyMfa() then sends the code.
  */
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [state, setState] = useState({ status: "loading", user: null, notice: null });
+  const [state, setState] = useState({ status: "loading", user: null, notice: null, recoveryCodesLeft: null });
 
   const acceptSession = useCallback((session) => {
     setCsrfToken(session.csrf_token);
-    setState({ status: "signed-in", user: session.user, notice: null });
+    setState({
+      status: "signed-in",
+      user: session.user,
+      notice: null,
+      recoveryCodesLeft: session.recovery_codes_left ?? null,
+    });
   }, []);
 
   const signOutLocally = useCallback((notice) => {
@@ -30,6 +39,8 @@ export function AuthProvider({ children }) {
       unauthorized: () => signOutLocally("expired"),
       passwordChangeRequired: () =>
         setState((s) => (s.user ? { ...s, user: { ...s.user, must_change_password: true } } : s)),
+      mfaSetupRequired: () =>
+        setState((s) => (s.user ? { ...s, user: { ...s.user, mfa_setup_required: true } } : s)),
     });
   }, [signOutLocally]);
 
@@ -46,9 +57,30 @@ export function AuthProvider({ children }) {
   }, [acceptSession, signOutLocally]);
 
   const login = useCallback(
-    async (username, password) => acceptSession(await authApi.login(username, password)),
+    async (username, password) => {
+      const result = await authApi.login(username, password);
+      if (result.mfa_required) return { mfaRequired: true };
+      acceptSession(result);
+      return { mfaRequired: false };
+    },
     [acceptSession],
   );
+
+  /* body: { code } or { recovery_code } */
+  const verifyMfa = useCallback(async (body) => acceptSession(await mfaApi.verify(body)), [acceptSession]);
+
+  /*
+   * Turning MFA on replaces the session. The new CSRF token is needed at once, but the user
+   * object is updated only later (finishMfaSetup), so the forced setup screen stays up while
+   * the recovery codes are shown.
+   */
+  const enableMfa = useCallback(async (code) => {
+    const result = await mfaApi.enable(code);
+    setCsrfToken(result.session.csrf_token);
+    return result;
+  }, []);
+
+  const dismissRecoveryWarning = useCallback(() => setState((s) => ({ ...s, recoveryCodesLeft: null })), []);
 
   const logout = useCallback(async () => {
     try {
@@ -64,8 +96,17 @@ export function AuthProvider({ children }) {
   );
 
   const value = useMemo(
-    () => ({ ...state, login, logout, changePassword }),
-    [state, login, logout, changePassword],
+    () => ({
+      ...state,
+      login,
+      verifyMfa,
+      enableMfa,
+      finishMfaSetup: acceptSession,
+      dismissRecoveryWarning,
+      logout,
+      changePassword,
+    }),
+    [state, login, verifyMfa, enableMfa, acceptSession, dismissRecoveryWarning, logout, changePassword],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

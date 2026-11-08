@@ -4,7 +4,8 @@ AI-assisted network mapping, IP address management and monitoring for small and 
 organizations (colleges, hospitals, SMEs). See `CLAUDE.md` for the full brief and security rules,
 and `PHASE_PROMPTS.md` for the build plan.
 
-**Status: Phase 7 done.** The backend has accounts, roles, sessions, CSRF protection, an audit
+**Status: Phase 8 done** (security hardening; see the end of this summary). The backend has
+accounts, roles, sessions, CSRF protection, an audit
 log and HMAC-signed agent authentication (see `docs/auth-design.md`). The agent discovers the
 network: it pings ranges, polls devices over SNMPv3 (system info, interfaces, IPv4/IPv6
 addresses, ARP and IPv6 neighbours), detects the vendor and sends a signed report that the
@@ -30,13 +31,20 @@ explanation, and guesses what each endpoint is (PC, printer, phone, camera, AP, 
 that is shown to you, and **Explain** buttons describe alerts, compliance findings and config
 diffs in plain language. Both work without any API key; a free Gemini/Groq key or a local
 Ollama model is optional. A simulated six-device campus (SNMP plus a fake Cisco SSH server)
-lets you run everything without any hardware.
+lets you run everything without any hardware. Phase 8 is a whole-project security review. It
+adds **two-step sign-in (TOTP MFA)**, required for admins, with single-use recovery codes. It
+adds **security alerts** for repeated failed sign-ins and bad agent signatures, with a cap so a
+flood can't fill the audit log, plus tests that check every route for roles, NoSQL injection
+and input limits, and one script that runs every scanner and test suite. The security
+documents are `docs/SECURITY.md` (threat model), `docs/SECURITY_REVIEW.md` (every CLAUDE.md
+rule checked) and `docs/SECURITY_TESTING.md` (how to demonstrate each control live).
 
 ```
 agent/     runs inside the private network; discovers and polls devices (Python)
 backend/   FastAPI API + serves the built React app (deployed to Render)
 frontend/  React + Vite dashboard
-docs/      architecture, known limitations (security docs arrive in Phase 8)
+docs/      architecture, security model, security review and testing guide, known limitations
+scripts/   security-check.ps1: all scanners and test suites before a release
 lab/       GNS3 notes and sample device configs (later phases)
 templates/ Jinja2 device config templates (cisco_ios/, mikrotik_routeros/)
 ```
@@ -68,11 +76,29 @@ uvicorn app.main:app --reload
 In `.env`, set at least:
 - `AGENT_KEY_ENCRYPTION_KEY`. Required; the backend refuses to start without it. Generate one
   with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+- `MFA_ENCRYPTION_KEY`. Required as well (Phase 8): a **different** Fernet key, generated the
+  same way. It encrypts the two-step sign-in secrets.
 - `ADMIN_USERNAME` and `ADMIN_PASSWORD`. These create the first admin when the database has no
-  users. Log in with them, change the password when asked, then delete both lines.
+  users. Log in with them, change the password when asked, set up two-step sign-in (below),
+  then delete both lines.
+
+### Two-step sign-in (MFA)
+Admins must use it; other users can turn it on under **Two-step** in the top bar.
+1. After the password, NetMap shows a QR code. Scan it with any authenticator app (Google or
+   Microsoft Authenticator, Aegis, 1Password…), or type the key shown under it.
+2. Enter the 6-digit code. NetMap shows **10 recovery codes once**. Store them somewhere safe:
+   each one signs you in once if you lose the phone.
+3. From then on, sign-in asks for the code after the password.
+
+If someone loses the phone and the codes, another admin uses **Reset MFA** in Admin → Users.
+If the only admin is locked out, someone with server access runs
+`python scripts/reset_mfa.py <username>` in `backend` (it uses `MONGODB_URI` from `.env`).
 
 Main API routes:
 - `/api/auth/login`, `/logout`, `/me`, `/change-password`
+- `/api/auth/mfa` (status), `/mfa/verify` (the code step of sign-in), `/mfa/setup`,
+  `/mfa/enable`, `/mfa/recovery-codes`, `/mfa/disable` (not for admins);
+  `POST /api/users/{id}/mfa/reset` (admin, not on yourself)
 - `/api/users` and `/api/agents` (admin)
 - `/api/audit` (admin)
 - `/api/agent/heartbeat`, `/api/agent/report`, `/api/agent/known-devices` (signed agent
@@ -333,6 +359,7 @@ role on every request.
 | Backend | `pytest` · `ruff check .` · `bandit -r app` · `pip-audit -r requirements.txt` |
 | Agent | `pytest` · `ruff check .` · `bandit -r netmap_agent simulation` · `pip-audit -r requirements.txt` |
 | Frontend | `npm test` · `npm run build` · `npm audit` |
+| Everything | `powershell -ExecutionPolicy Bypass -File scripts\security-check.ps1` (from the project root) |
 
 Backend tests need the local MongoDB running. They use a separate `netmap_test` database that
 they wipe, never `netmap`. Point them elsewhere with the `NETMAP_TEST_MONGODB_URI` env var. The agent's simulation tests

@@ -27,6 +27,7 @@ from app.api import (
     dashboard,
     devices,
     ips,
+    mfa,
     notifications,
     predictions,
     subnets,
@@ -45,7 +46,7 @@ logger = logging.getLogger("netmap")
 # Every API router, in one place. tests/test_rbac.py checks each route in these for an access
 # rule and also checks that no other /api route exists in the app.
 API_ROUTERS = (
-    auth.router, users.router, agents.router, audit.router, agent_ingest.router,
+    auth.router, mfa.router, users.router, agents.router, audit.router, agent_ingest.router,
     subnets.router, ips.router, alerts.router, devices.router, dashboard.router,
     topology.router, notifications.router, configs.router, changes.router,
     agent_config.router, agent_ai.router, ai.router, predictions.router,
@@ -74,6 +75,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
             )
         app.state.vault = KeyVault(settings.agent_key_encryption_key.get_secret_value())
+        if settings.mfa_encryption_key is None:
+            raise RuntimeError(
+                "MFA_ENCRYPTION_KEY is not set. Generate one with: python -c \"from "
+                "cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            )
+        app.state.mfa_vault = KeyVault(settings.mfa_encryption_key.get_secret_value(),
+                                       name="MFA_ENCRYPTION_KEY")
 
         client = db.create_client(settings)
         app.state.mongo = client
@@ -85,6 +93,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                          appname="netmap-ai-readonly")
         app.state.ai_db = (ai_client or client)[settings.mongodb_db]
         app.state.ai_readonly_user = ai_client is not None
+        if settings.is_production and ai_client is None:
+            # CLAUDE.md 7.9: in production Ask NetMap runs only as the read-only user.
+            logger.warning("AI_MONGODB_URI is not set: Ask NetMap is disabled in production")
         try:
             await db.ensure_indexes(app.state.db)
             await ensure_first_admin(app.state.db, settings)

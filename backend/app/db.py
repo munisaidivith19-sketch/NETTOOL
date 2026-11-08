@@ -22,6 +22,7 @@ SUBNET_USAGE_TTL_SECONDS = 400 * 24 * 60 * 60
 PREDICTIONS_TTL_SECONDS = 14 * 24 * 60 * 60
 EXPLANATIONS_TTL_SECONDS = 30 * 24 * 60 * 60
 AI_CALLS_TTL_SECONDS = 10 * 60
+SECURITY_EVENTS_TTL_SECONDS = 24 * 60 * 60
 
 # CLAUDE.md section 6. Unique indexes are what actually stop duplicates (e.g. two records for the
 # same IP); TTL indexes make MongoDB delete old metrics and expired sessions on its own.
@@ -134,6 +135,18 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("expires_at", ASCENDING)], expireAfterSeconds=0, name="expires_at_ttl"),
         IndexModel([("token_hash", ASCENDING)], unique=True, name="token_hash_unique"),
         IndexModel([("user_id", ASCENDING)], name="user_id"),
+    ],
+    # Phase 8: the half-finished sign-ins waiting for an MFA code (5 minutes each).
+    "mfa_challenges": [
+        IndexModel([("token_hash", ASCENDING)], unique=True, name="token_hash_unique"),
+        IndexModel([("expires_at", ASCENDING)], expireAfterSeconds=0, name="expires_at_ttl"),
+    ],
+    # Phase 8: failure counters per source address (services/security_events.py).
+    "security_events": [
+        IndexModel([("kind", ASCENDING), ("ip", ASCENDING), ("window", ASCENDING)],
+                   unique=True, name="kind_ip_window_unique"),
+        IndexModel([("at", ASCENDING)], expireAfterSeconds=SECURITY_EVENTS_TTL_SECONDS,
+                   name="at_ttl"),
     ],
     "login_attempts": [
         IndexModel([("ip", ASCENDING), ("at", DESCENDING)], name="ip_at"),

@@ -28,7 +28,8 @@ def hash_token(token: str) -> str:
 
 
 async def create_session(
-    db: AsyncDatabase, user_id: Any, ip: str | None, user_agent: str | None
+    db: AsyncDatabase, user_id: Any, ip: str | None, user_agent: str | None,
+    mfa: str | None = None,
 ) -> tuple[str, dict]:
     token = secrets.token_urlsafe(32)
     now = utcnow()
@@ -42,6 +43,8 @@ async def create_session(
         "expires_at": now + ABSOLUTE_LIFETIME,
         "ip": ip,
         "user_agent": (user_agent or "")[:200],
+        # How the second step was passed ("totp", "recovery_code"), or None without MFA.
+        "mfa": mfa,
     }
     await db.sessions.insert_one(session)
     return token, session

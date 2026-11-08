@@ -32,7 +32,9 @@ def test_admin_actions_audited(client, sync_db):
                 json={"new_password": "Velvet-Summit-28-Copper"})
     agent = client.post("/api/agents", headers=csrf(token), json={"name": "lab"}).json()
     client.post(f"/api/agents/{agent['id']}/revoke", headers=csrf(token))
-    assert _actions(sync_db)[1:] == [
+    # The admin's sign-in is two entries: the password step and the MFA code step.
+    assert _actions(sync_db)[:2] == ["auth.mfa_challenge", "auth.login"]
+    assert _actions(sync_db)[2:] == [
         "user.create", "user.role_change", "user.disable", "user.password_reset",
         "agent.create", "agent.revoke",
     ]

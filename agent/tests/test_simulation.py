@@ -2,6 +2,7 @@
 SNMPv3 authPriv. Skipped (with the reason) when snmpsim isn't installed or can't start."""
 
 import asyncio
+import logging
 import subprocess
 import threading
 import time
@@ -132,9 +133,12 @@ def test_dead_target_does_not_break_live_one(responder):
     assert not dead.ok
 
 
-def test_wrong_v3_key_fails_cleanly(responder):
+def test_wrong_v3_key_fails_cleanly(responder, caplog):
+    caplog.set_level(logging.DEBUG)
     settings = sim_settings(snmp_v3_auth_key="wrong-auth-key-value", snmp_timeout_seconds=1,
                             snmp_retries=0)
     [device] = asyncio.run(poll_all(settings, [(LISTEN, PORT)]))
     assert not device.ok and device.error
     assert "wrong-auth-key-value" not in device.error
+    assert "wrong-auth-key-value" not in caplog.text
+    assert run_simulation.SIM_PRIV_KEY not in caplog.text

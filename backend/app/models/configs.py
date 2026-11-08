@@ -48,6 +48,8 @@ class JobStatus(StrictModel):
 
 TemplateId = Annotated[str, StringConstraints(pattern=r"^[a-z_]{2,40}/[a-z_]{2,40}$")]
 Commands = Annotated[str, StringConstraints(min_length=1, max_length=MAX_COMMANDS_CHARS)]
+_VarText = Annotated[str, StringConstraints(max_length=500)]
+VariableValue = _VarText | int | bool | Annotated[list[_VarText], Field(max_length=200)] | None
 Title = Annotated[str, StringConstraints(min_length=3, max_length=120,
                                          pattern=r"^[^\x00-\x1f\x7f<>]+$")]
 Note = Annotated[str, StringConstraints(max_length=500, pattern=r"^[^\x00-\x08\x0b-\x1f\x7f]*$")]
@@ -58,10 +60,10 @@ class ChangeSource(StrictModel):
 
     device_id: ObjectIdStr
     template: TemplateId | None = None
-    # Values are validated by the template's own model (app/config_mgmt/templates.py).
+    # Values are validated by the template's own model (app/config_mgmt/templates.py); the
+    # sizes here only cap what is accepted before that check runs.
     variables: dict[Annotated[str, StringConstraints(pattern=r"^[a-z_]{1,40}$")],
-                    str | int | bool | list[str] | None] = Field(default_factory=dict,
-                                                                 max_length=40)
+                    VariableValue] = Field(default_factory=dict, max_length=40)
     commands: Commands | None = None
 
     @model_validator(mode="after")

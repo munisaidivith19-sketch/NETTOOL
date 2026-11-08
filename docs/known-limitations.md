@@ -42,7 +42,7 @@ Phase 6 the only finding is the dnspython one above; Phase 7 adds the Pillow one
   in the Render environment and your local `.env`.
 - **The `Secure` cookie on http://localhost** works in Chrome, Edge and Firefox, which treat
   localhost as secure, but not in Safari. Use one of the first three for local development.
-- **No TOTP MFA yet** (Phase 8).
+- ~~No TOTP MFA yet~~: added in Phase 8 (see below).
 
 ## Phase 2 (discovery)
 - **SNMP credentials sit in the agent's `.env` in plain text** until Phase 6 adds the
@@ -182,3 +182,32 @@ Phase 6 the only finding is the dnspython one above; Phase 7 adds the Pillow one
   to the agent's virtual environment. The backend has none of them.
 - **Explanation cache.** A model explanation is cached for 30 days by its exact input; an
   alert whose details change gets a new one.
+
+## Phase 8 (security hardening)
+- **First MFA enrolment is protected only by the password.** A new admin enrols right after
+  the forced password change. Someone who knows the initial password and signs in first
+  could enrol their own phone. Hand over initial passwords through a separate channel, and
+  sign in at once.
+- **TOTP can be phished in real time.** A proxy site can relay a code within its 30 seconds.
+  Passkeys (WebAuthn) would prevent that; they are not implemented.
+- **`MFA_ENCRYPTION_KEY` is another single point of failure**, like the agent key. Leaked
+  together with the database, it exposes the TOTP secrets. If it is lost, every MFA user must
+  be reset (`backend/scripts/reset_mfa.py` or *Reset MFA*). Rotation: put the new key first;
+  existing secrets keep working with the old key until users re-enrol, so keep the old key
+  in the list until then.
+- **Clock skew.** Codes are accepted for one step either side (±30 s). A phone or server
+  clock further off fails every code; check Windows time sync on a self-hosted server.
+- **Audit-flood protection is per source IP.** One IP can add at most 21 entries per
+  10 minutes for failed agent signatures. An attacker with many IPs can still add more.
+  Failed password sign-ins are capped per IP by the sign-in limit instead.
+- **Security alerts don't resolve themselves.** Nothing "recovers" from a burst of failed
+  sign-ins, so an engineer resolves the alert after checking the audit log. A new burst
+  reopens it.
+- **No headless-browser check of the Phase 8 screens.** The vitest suite covers the sign-in
+  code step, the forced setup screen, the QR drawing and the Users page MFA column, and the
+  API flows were run end to end. The new screens have not been looked at in light/dark mode
+  or at phone width in a real browser.
+- **Dev environment only:** the virtual environments came with setuptools 57.4.0, which
+  pip-audit flags. It is not a runtime dependency and isn't installed on Render; it is
+  upgraded in the local venvs.
+

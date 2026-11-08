@@ -27,7 +27,7 @@ from pymongo.errors import DuplicateKeyError
 
 from app.security.rbac import mark_access
 from app.security.sessions import utcnow
-from app.services import audit
+from app.services import security_events
 
 MAX_CLOCK_SKEW = timedelta(minutes=5)
 NONCE_TTL_SECONDS = 600  # longer than the full ±5 minute window, so a nonce can't be reused
@@ -51,16 +51,17 @@ def fingerprint(key: str) -> str:
 
 
 class KeyVault:
-    """Encrypts and decrypts agent keys. Several comma-separated Fernet keys allow rotation."""
+    """Encrypts and decrypts server-held secrets: agent keys, and (Phase 8) TOTP secrets under
+    their own MFA_ENCRYPTION_KEY. Several comma-separated Fernet keys allow rotation."""
 
-    def __init__(self, keys_csv: str) -> None:
+    def __init__(self, keys_csv: str, name: str = "AGENT_KEY_ENCRYPTION_KEY") -> None:
         keys = [k.strip() for k in keys_csv.split(",") if k.strip()]
         if not keys:
-            raise ValueError("AGENT_KEY_ENCRYPTION_KEY is empty")
+            raise ValueError(f"{name} is empty")
         try:
             self._fernet = MultiFernet([Fernet(k) for k in keys])
         except ValueError as exc:
-            raise ValueError("AGENT_KEY_ENCRYPTION_KEY is not a valid Fernet key") from exc
+            raise ValueError(f"{name} is not a valid Fernet key") from exc
 
     def encrypt(self, agent_key: str) -> str:
         return self._fernet.encrypt(agent_key.encode()).decode()
@@ -95,14 +96,16 @@ async def require_agent(request: Request) -> CurrentAgent:
 
     async def reject(reason: str) -> HTTPException:
         # The reason goes to the audit log only. The client always gets the same answer, so
-        # it learns nothing about which check failed.
-        await audit.record(
+        # it learns nothing about which check failed. Failures are counted per source address:
+        # a flood is audited only up to a limit and opens a security alert (Phase 8).
+        await security_events.failure(
             db,
             request,
+            "agent_auth",
             action="agent.auth",
             result="failure",
             actor={"type": "agent", "id": agent_id} if AGENT_ID_RE.match(agent_id) else None,
-            details={"reason": reason, "path": request.url.path},
+            details={"reason": reason, "path": request.url.path[:200]},
         )
         return HTTPException(status.HTTP_401_UNAUTHORIZED, "Agent authentication failed")
 

@@ -102,6 +102,7 @@ export const ALERT_TYPES = {
   compliance: "Compliance",
   config_changed: "Config changed",
   change_failed: "Change failed",
+  security: "Security",
 };
 
 /* Device types from the agent's classifier (Phase 7). */

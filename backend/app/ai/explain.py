@@ -77,6 +77,12 @@ ALERT_TEMPLATES = {
         "An approved configuration change could not be applied, or it was rolled back after "
         "the device stopped answering.",
         "Open the change request's timeline to see which step failed."),
+    "security": (
+        "Someone is repeatedly failing to sign in or to authenticate as an agent, from the "
+        "address shown. It can be a mistyped password or a misconfigured agent, but also a "
+        "password-guessing attack or someone probing the agent API.",
+        "Check the audit log for that address. If it isn't a known user or agent, block the "
+        "address at the firewall and make sure the targeted accounts use MFA."),
 }
 
 # First word(s) of a config line → what part of the device it changes (template diffs).

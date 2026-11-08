@@ -1208,3 +1208,66 @@
 .query-box pre {
   margin: var(--space-2) 0;
 }
+
+/* ---- Phase 8: two-step sign-in ---------------------------------------------------------- */
+
+.auth-card-wide {
+  width: min(100%, 520px);
+}
+
+.auth-foot {
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.code-input {
+  font-family: var(--font-addr);
+  font-size: var(--text-lg);
+  letter-spacing: 0.3em;
+  max-width: 12ch;
+}
+
+.mfa-step {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.mfa-steps {
+  margin: 0;
+  padding-left: 1.25em;
+}
+
+/* A QR code must stay dark-on-light in every theme, or phone cameras can't read it. */
+.qr {
+  width: min(100%, 220px);
+  height: auto;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.qr-bg {
+  fill: #fff;
+}
+
+.qr-dots {
+  fill: #000;
+}
+
+.mfa-secret {
+  font-family: var(--font-addr);
+  overflow-wrap: anywhere;
+}
+
+.recovery {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, max-content));
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+  padding-left: 1.75em;
+  font-family: var(--font-addr);
+}

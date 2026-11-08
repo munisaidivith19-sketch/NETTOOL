@@ -114,3 +114,25 @@ async def reset_password(
                        actor=audit.user_actor(admin), target=_target(doc))
     doc.update(changes)
     return user_out(doc)
+
+
+@router.post("/{user_id}/mfa/reset", response_model=UserOut)
+async def reset_mfa(
+    request: Request, user_id: UserIdPath, admin: CurrentUser = Depends(require_admin)
+) -> UserOut:
+    """For a user who lost their phone and their recovery codes. They must set MFA up again
+    (admins at their next sign-in). Not allowed on yourself: otherwise a stolen admin session
+    could remove the second factor of the account it is using."""
+    db = request.app.state.db
+    doc = await _get_user(request, user_id)
+    if doc["_id"] == admin.id:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Ask another admin to reset your two-step sign-in")
+    had = bool((doc.get("mfa") or {}).get("enabled"))
+    await db.users.update_one({"_id": doc["_id"]}, {"$unset": {"mfa": ""}})
+    await revoke_user_sessions(db, doc["_id"])
+    await audit.record(db, request, action="user.mfa_reset", result="success",
+                       actor=audit.user_actor(admin), target=_target(doc),
+                       details={"was_enabled": had})
+    doc.pop("mfa", None)
+    return user_out(doc)

@@ -49,7 +49,7 @@ FIELD_NOTES = {
                     "manual. ping_up: true | false",
     "alerts": "status: open | resolved. severity: critical | warning | info. type: "
               "duplicate_ip | subnet_usage | device_down | interface_down | new_mac | "
-              "traffic_anomaly | compliance | config_changed | change_failed",
+              "traffic_anomaly | compliance | config_changed | change_failed | security",
     "links": "LLDP/CDP neighbours. protocol: lldp | cdp. status: up | stale",
     "mac_entries": "switch MAC tables: which port (device_id, if_index) a MAC was seen on",
     "mac_addresses": "every endpoint MAC. classification.type: pc | printer | phone | camera |"

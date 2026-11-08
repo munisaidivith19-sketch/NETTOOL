@@ -104,6 +104,11 @@ def update(path: Path = DEFAULT_PATH) -> int:
     import httpx
 
     with httpx.stream("GET", IEEE_URL, timeout=60, follow_redirects=True) as response:
+        # Every hop must be HTTPS: a redirect through plain http would let anyone on the path
+        # swap the file (it decides how endpoints are labelled).
+        hops = [r.url for r in response.history] + [response.url]
+        if any(url.scheme != "https" for url in hops):
+            raise ValueError("OUI download was redirected to a non-HTTPS address; not saved")
         response.raise_for_status()
         chunks, size = [], 0
         for chunk in response.iter_bytes():

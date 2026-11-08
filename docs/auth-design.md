@@ -1,4 +1,4 @@
-# Authentication and request security (Phases 1, 6 and 7)
+# Authentication and request security (Phases 1, 6, 7 and 8)
 
 How a person and an agent prove who they are, and what stops common attacks.
 The code is in `backend/app/security/`.
@@ -200,3 +200,76 @@ from responses and logs.
 
 AI never writes configuration. Phase 7 only reads and explains. Any future AI-drafted change
 goes through the Phase 6 change flow: denylist, four-eyes approval, signed job.
+
+## 9. Two-step sign-in, TOTP MFA (Phase 8)
+
+**What TOTP is.** The server and the user's phone share a random 160-bit secret. Every 30
+seconds both compute HMAC-SHA1(secret, number of 30-second steps since 1970), shortened to 6
+digits (RFC 6238). The code proves the user holds the phone, so a stolen password alone no
+longer opens an admin account.
+
+**Storage** (`users.mfa`):
+
+| Field | What | Why this way |
+|---|---|---|
+| `secret_ct` | the TOTP secret, Fernet-encrypted under `MFA_ENCRYPTION_KEY` | the server must compute codes, so the secret can't be hashed like a password. The key is separate from `AGENT_KEY_ENCRYPTION_KEY`, and a database copy alone reveals nothing |
+| `last_step` | time step of the last accepted code | a code is accepted only for a newer step, so it works once |
+| `recovery` | SHA-256 of 10 single-use recovery codes (`XXXXX-XXXXX`, 50 random bits) | random, high-entropy values need no slow hash (like session tokens); bcrypt would cost ~2.5 s per check |
+
+**Sign-in with MFA is two requests:**
+1. `POST /api/auth/login` with the correct password returns `{"mfa_required": true}` and
+   **no session**. The server stores a *challenge* (token hash, user, IP, attempt counter,
+   5-minute TTL). The browser gets its token in the cookie `netmap_mfa`: httpOnly, Secure,
+   SameSite=Strict, `Path=/api/auth/mfa`, so no other route receives it. The failed-login
+   counter is reset only when step 2 succeeds.
+2. `POST /api/auth/mfa/verify` with `{code}` or `{recovery_code}`:
+   - The code is checked against the current step ±1, with a constant-time comparison.
+   - `last_step` is updated with a conditional, atomic update (`last_step < step`), so two
+     parallel requests with the same code can't both win.
+   - A wrong code counts toward the account lockout and the per-IP limit, like a wrong
+     password. Each challenge allows 5 attempts.
+   - On success: the challenge is deleted, an earlier session is discarded (session
+     fixation), and a new session is created. `auth.login` is audited with
+     `details.mfa = totp | recovery_code`.
+   - Every failure gives the same 401 "Invalid or expired code".
+
+**Required for admins.** `require_role` refuses every request from an admin without MFA with
+`403 mfa_setup_required`, after the password-change check. It is evaluated on every request,
+so a user promoted to admin is stopped at once. Only `me`, `logout`, `change-password` and
+the MFA setup routes (`require_session`) still work. The React app shows the forced setup
+screen.
+
+**Enrolment** (`/api/auth/mfa/setup` → `/enable`):
+- Setup creates a pending secret (encrypted, valid 10 minutes). It returns the secret, the
+  `otpauth://` URI and the QR code as rows of 0/1. React draws the rows as SVG squares, so no
+  image or `data:` URL is needed and the CSP stays strict.
+- Enable checks one code against the pending secret. It then turns MFA on, returns the 10
+  recovery codes **once**, signs out every other session, and rotates the current one (new
+  CSRF token).
+
+**Changing or removing MFA:**
+- *New recovery codes* needs a current code.
+- *Turn off* needs the password and a code, and is refused for admins.
+- *Reset MFA* is admin only, refused on yourself, signs the user out, and is audited.
+- If the last admin is locked out, `backend/scripts/reset_mfa.py` needs database access.
+
+**Audit actions:** `auth.mfa_challenge`, `auth.mfa_failure`, `auth.mfa_enable`,
+`auth.mfa_disable`, `auth.mfa_recovery_used`, `auth.mfa_recovery_regenerate`,
+`auth.mfa_setup_required`, `user.mfa_reset`. The secret and the codes are never logged
+(`tests/test_mfa.py` checks the logs and the audit log).
+
+## 10. Security alerts and bounded audit (Phase 8)
+
+Failed authentication from strangers used to write one audit entry per request. Now
+`services/security_events.py` counts failures per (kind, source IP, 10-minute window) in
+`security_events` (TTL 1 day):
+- the first 20 in a window are audited in full
+- the 21st writes one "suppressed" entry
+- the rest only increase the counter
+
+A `security` alert opens:
+- when an account is locked
+- when an IP hits the sign-in rate limit
+- after 5 bad agent signatures from one IP within 10 minutes
+
+It is sent by Telegram or e-mail like any other alert.

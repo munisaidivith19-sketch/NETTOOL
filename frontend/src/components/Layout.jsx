@@ -98,7 +98,7 @@ function AskBox() {
 }
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, recoveryCodesLeft, dismissRecoveryWarning } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
 
@@ -150,11 +150,25 @@ export default function Layout() {
           <Link to="/account/password" className="topbar-link">
             Password
           </Link>
+          <Link to="/account/security" className="topbar-link">
+            Two-step
+          </Link>
           <button type="button" className="button button-secondary" onClick={logout}>
             Sign out
           </button>
         </header>
         <main className="main" id="main">
+          {recoveryCodesLeft !== null && recoveryCodesLeft <= 2 && (
+            <div className="notice notice-warn" role="status">
+              You signed in with a recovery code. {recoveryCodesLeft} left.{" "}
+              <Link to="/account/security" onClick={dismissRecoveryWarning}>
+                Get new recovery codes
+              </Link>{" "}
+              <button type="button" className="link-button" onClick={dismissRecoveryWarning}>
+                Dismiss
+              </button>
+            </div>
+          )}
           <Outlet />
         </main>
       </div>

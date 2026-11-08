@@ -2,7 +2,18 @@ import { useState } from "react";
 import { users as usersApi } from "../../api/api.js";
 import { useAuth } from "../../auth/AuthProvider.jsx";
 import { ROLE_LABELS } from "../../auth/permissions.js";
-import { Badge, Dialog, Empty, ErrorNote, Field, Loading, PageHead, Panel, SuccessNote } from "../../components/ui.jsx";
+import {
+  Badge,
+  ConfirmButton,
+  Dialog,
+  Empty,
+  ErrorNote,
+  Field,
+  Loading,
+  PageHead,
+  Panel,
+  SuccessNote,
+} from "../../components/ui.jsx";
 import { formatDateTime } from "../../format.js";
 import { useResource } from "../../hooks/useResource.js";
 
@@ -163,6 +174,7 @@ export default function Users() {
                   <th scope="col">Username</th>
                   <th scope="col">Role</th>
                   <th scope="col">State</th>
+                  <th scope="col">Two-step</th>
                   <th scope="col">Last sign-in</th>
                   <th scope="col">Actions</th>
                 </tr>
@@ -193,6 +205,15 @@ export default function Users() {
                         {u.disabled ? <Badge tone="down">Disabled</Badge> : <Badge tone="up">Active</Badge>}{" "}
                         {u.must_change_password && <Badge tone="warn">Must change password</Badge>}
                       </td>
+                      <td>
+                        {u.mfa_enabled ? (
+                          <Badge tone="up">On</Badge>
+                        ) : u.role === "admin" ? (
+                          <Badge tone="warn">Not set up</Badge>
+                        ) : (
+                          <span className="muted">Off</span>
+                        )}
+                      </td>
                       <td>{formatDateTime(u.last_login_at)}</td>
                       <td className="actions">
                         {!self && (
@@ -209,6 +230,24 @@ export default function Users() {
                             <button type="button" className="button button-secondary" onClick={() => setResetting(u)}>
                               Reset password
                             </button>
+                            {/* For a lost phone. Never on yourself: the server refuses that too. */}
+                            {u.mfa_enabled && (
+                              <ConfirmButton
+                                confirmLabel="Yes, reset"
+                                onConfirm={async () => {
+                                  setError(null);
+                                  try {
+                                    await usersApi.resetMfa(u.id);
+                                    setNote(`Two-step sign-in reset for ${u.username}. They must set it up again.`);
+                                    list.reload();
+                                  } catch (err) {
+                                    setError(err);
+                                  }
+                                }}
+                              >
+                                Reset two-step
+                              </ConfirmButton>
+                            )}
                           </>
                         )}
                       </td>

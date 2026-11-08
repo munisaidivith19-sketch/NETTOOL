@@ -14,6 +14,7 @@ import Ask from "./pages/Ask.jsx";
 import ChangeDetail from "./pages/ChangeDetail.jsx";
 import ChangeNew from "./pages/ChangeNew.jsx";
 import ChangePassword from "./pages/ChangePassword.jsx";
+import MfaSettings, { ForcedMfaSetup } from "./pages/MfaSetup.jsx";
 import Changes from "./pages/Changes.jsx";
 import Configuration from "./pages/Configuration.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
@@ -68,6 +69,8 @@ export default function App() {
   // the user lands on the page they were trying to open.
   if (status === "signed-out") return <Login />;
   if (user.must_change_password) return <ChangePassword forced />;
+  // Admins must use two-step sign-in; the server refuses their other requests until it is on.
+  if (user.mfa_setup_required) return <ForcedMfaSetup />;
 
   return (
     <SummaryProvider>
@@ -96,6 +99,7 @@ export default function App() {
             }
           />
           <Route path="account/password" element={<ChangePassword />} />
+          <Route path="account/security" element={<MfaSettings />} />
           <Route path="admin/users" element={<RequireAdmin><Users /></RequireAdmin>} />
           <Route path="admin/agents" element={<RequireAdmin><Agents /></RequireAdmin>} />
           <Route path="admin/audit" element={<RequireAdmin><AuditLog /></RequireAdmin>} />

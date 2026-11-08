@@ -330,6 +330,33 @@ on subnet and device pages, "Running out of addresses" on the dashboard, the Ask
 and top-bar box, Explain buttons on alerts, findings and diffs, and type badges with an
 engineer-only "Correct type" control. AI text and query results are rendered as text only.
 
+## Added in Phase 8: security hardening
+```
+ browser ── POST /api/auth/login ──► password OK + MFA on? ── no ──► session cookie
+                                          │ yes
+                                          ▼
+                         mfa_challenges (5 min TTL) + cookie netmap_mfa (Path=/api/auth/mfa)
+ browser ── POST /api/auth/mfa/verify {code | recovery_code}
+              └► step newer than users.mfa.last_step (atomic) ──► challenge deleted, session
+
+ failed agent signature / rate-limited login ─► security_events (kind, ip, 10-min window)
+     count ≤ 20 → audit entry · 21 → one "suppressed" entry · threshold → `security` alert
+```
+
+| Part | Where | What |
+|---|---|---|
+| TOTP | `security/mfa.py` | secrets (Fernet, `MFA_ENCRYPTION_KEY`), codes with replay check, SHA-256 recovery codes, QR code as 0/1 rows (segno) |
+| Routes | `api/mfa.py`, `api/auth.py`, `api/users.py` | code step, setup, enable, recovery codes, disable (not admins), admin reset |
+| Enforcement | `security/rbac.py` | `mfa_setup_required` blocks admins without MFA on every role-checked route; `mfa_challenge` is a new access marker |
+| Security alerts | `services/security_events.py` | bounded audit for unauthenticated failures, `security` alerts |
+| Ask NetMap | `api/ai.py` | refuses in production without the read-only database user |
+| Scripts | `backend/scripts/reset_mfa.py`, `backend/scripts/demo_agent_request.py`, `scripts/security-check.ps1` | last-admin recovery, replay demo, all scanners and tests |
+
+**Frontend**: the sign-in code step (with a recovery-code option), the forced setup screen
+for admins (QR drawn as SVG squares, recovery codes shown once), *Two-step* account page,
+MFA column and *Reset MFA* on Admin → Users, a low-recovery-codes banner, and the *Security*
+alert type.
+
 ## MongoDB indexes
 | Collection | Index | Why |
 |---|---|---|
@@ -337,6 +364,8 @@ engineer-only "Correct type" control. AI text and query results are rendered as 
 | predictions | `(kind, target_key)` unique, `generated_at` TTL (14 days) | one forecast per subnet / uplink; forecasts from a stopped agent disappear |
 | ai_explanations | `key` unique, `at` TTL (30 days) | cache: the same alert isn't sent to the model twice |
 | ai_calls | `(user_id, at)`, `at` TTL (10 minutes) | per-user AI rate limit |
+| mfa_challenges | `token_hash` unique, `expires_at` TTL | half-finished MFA sign-ins vanish after 5 minutes |
+| security_events | `(kind, ip, window)` unique, `at` TTL (1 day) | one failure counter per source and 10-minute window |
 | devices | `mgmt_ip` unique, `status`, `(agent_id, mgmt_ip_key)` | one record per managed device; status filters; known-devices list |
 | interfaces | `(device_id, if_index)` unique, `mac` | one row per interface; LLDP chassis-ID matching and "is this MAC a known device?" |
 | ip_addresses | `ip_key` unique, `mac`, `reservation.hostname` (sparse), `device_id` (sparse) | the database itself refuses a duplicate IP record or reservation; IP-by-MAC and host-name lookups |

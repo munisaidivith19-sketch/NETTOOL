@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Fernet key(s) that encrypt agent API keys at rest. Comma-separated: the first one encrypts,
     # all of them can decrypt, which allows key rotation. Required: the app won't start without it.
     agent_key_encryption_key: SecretStr | None = None
+    # Phase 8: Fernet key(s) that encrypt users' TOTP secrets (same format and rotation rule).
+    # Separate from the agent key, so one leaked key exposes only one kind of secret.
+    mfa_encryption_key: SecretStr | None = None
 
     bcrypt_rounds: int = Field(default=MIN_BCRYPT_ROUNDS, ge=4, le=15)
 
