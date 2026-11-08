@@ -91,7 +91,7 @@ STRIDE = **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosur
 | | Threat | Control | Code |
 |---|---|---|---|
 | S | Password guessing | bcrypt cost 12; 12-character minimum and a common-password list; per-IP limit (10 failures in 5 min); account lock (5 failures → 15 min); one generic error | `security/passwords.py`, `security/rate_limit.py`, `api/auth.py` |
-| S | Stolen admin password | **TOTP MFA required for admins.** Codes are single-use (the time step must increase). Wrong codes count toward the lockout. Recovery codes are single-use | `security/mfa.py`, `api/mfa.py`, `security/rbac.py:104` |
+| S | Stolen admin password | **Optional** TOTP MFA (not required for admins since 2026-11-08; a stolen admin password alone is enough on accounts without it). Codes are single-use (the time step must increase). Wrong codes count toward the lockout. Recovery codes are single-use | `security/mfa.py`, `api/mfa.py` |
 | S | Session theft or fixation | Random 256-bit token; only its SHA-256 is stored; httpOnly, Secure, SameSite=Strict cookie; 8 h absolute and 30 min idle; a new session at every sign-in; sessions revoked on password change, MFA change and MFA reset | `security/sessions.py` |
 | T | CSRF: another site makes the browser send a request | SameSite=Strict, plus a per-session CSRF token in `X-CSRF-Token`, plus an Origin check, plus JSON-only bodies (an HTML form can't send them) | `security/csrf.py` |
 | T | NoSQL injection | Every body is a strict Pydantic model: typed fields can't hold `{"$ne": …}`, extra keys are refused, filters are built from validated fields. Tested on every write route | `models/common.py`, `tests/test_input_limits.py` |
@@ -102,7 +102,7 @@ STRIDE = **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosur
 | D | Huge bodies or deep JSON | 2 MB body limit (10 MB for agent reports); every string and list has a maximum size | `security/http.py:16-19`, `tests/test_input_limits.py` |
 | D | Audit-log flooding with bad signatures or logins | Failures are counted per IP and 10-minute window. Only the first 20 are audited in full, then one "suppressed" entry. A `security` alert opens | `services/security_events.py` |
 | D | Ask NetMap used as a DoS amplifier | Per-user rate limit; at most 10 pipeline stages; 100 results; 4 KB query; server-side `maxTimeMS` | `api/ai.py`, `ai/query_guard.py` |
-| E | A viewer or engineer acts as an admin | Server-side `require_role`; an admin without MFA is blocked from admin routes until it is set up; an admin can't reset their own MFA | `security/rbac.py`, `api/users.py` |
+| E | A viewer or engineer acts as an admin | Server-side `require_role`; an admin can't reset their own MFA | `security/rbac.py`, `api/users.py` |
 | E | The approver is the creator | Four-eyes rule; an admin override needs a reason and is audited | `api/changes.py:220` |
 
 ### 3.3 Database (MongoDB)
@@ -140,8 +140,8 @@ STRIDE = **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosur
 4. **Recovery codes.** There are 10 of them, 50 random bits each, and each works once. Only
    their SHA-256 hashes are stored. Using one is audited, and the UI warns when 2 or fewer
    are left.
-5. **Admins must enrol.** Until MFA is on, an admin can only change their password and set up
-   MFA. A user promoted to admin is stopped on their next request.
+5. **Optional.** Since 2026-11-08 no role is forced to enrol. Anyone can turn MFA off again
+   with their password and a current code.
 6. **Lost phone.** Another admin can press "Reset MFA". If the only admin is locked out,
    someone with database access runs `python backend/scripts/reset_mfa.py <username>`.
 
@@ -150,6 +150,9 @@ STRIDE = **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosur
 See [known-limitations.md](known-limitations.md) for the full list. The security-relevant
 ones:
 
+- **Admin MFA is optional (owner decision 2026-11-08).** An admin account without MFA is
+  protected only by its password, the lockout and the rate limits. Turn MFA on for admins
+  before any real deployment.
 - **First MFA enrolment is protected only by the password.** A new admin sets up MFA
   straight after the forced password change. Someone who has the initial password before
   the real admin signs in could enrol their own phone. Mitigation: give the initial password

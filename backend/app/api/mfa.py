@@ -5,8 +5,8 @@
 - POST /api/auth/mfa/setup           start setup: a new secret and its QR code
 - POST /api/auth/mfa/enable          finish setup with a code → 10 recovery codes, shown once
 - POST /api/auth/mfa/recovery-codes  replace my recovery codes (needs a current code)
-- POST /api/auth/mfa/disable         turn MFA off (needs password + code; not for admins)
-Setup works with an ordinary session, because an admin without MFA must be able to reach it.
+- POST /api/auth/mfa/disable         turn MFA off (needs password + code)
+Two-step sign-in is optional for every role (owner decision 2026-11-08).
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -178,8 +178,6 @@ async def new_recovery_codes(body: MfaCodeRequest, request: Request,
 async def disable(body: MfaDisableRequest, request: Request,
                   user: CurrentUser = Depends(require_user)) -> Response:
     db = request.app.state.db
-    if user.role == "admin":
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Two-step sign-in is required for admins")
     doc = await db.users.find_one({"_id": user.id})
     if not verify_password(body.password, doc["password_hash"]):
         await count_user_failure(request, doc)

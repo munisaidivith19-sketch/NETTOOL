@@ -4,7 +4,6 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from app.models.common import PasswordInput, Role, StrictModel
-from app.security.rbac import mfa_setup_required
 
 MfaCode = Annotated[str, StringConstraints(pattern=r"^[0-9]{6}$")]
 # XXXXX-XXXXX; lower case, spaces and a missing dash are accepted and normalised.
@@ -50,8 +49,6 @@ class UserOut(BaseModel):
     disabled: bool = False
     must_change_password: bool = False
     mfa_enabled: bool = False
-    # An admin without two-step sign-in can only reach the MFA setup screen.
-    mfa_setup_required: bool = False
     created_at: datetime | None = None
     last_login_at: datetime | None = None
 
@@ -71,7 +68,6 @@ class MfaChallengeOut(BaseModel):
 
 class MfaStatusOut(BaseModel):
     enabled: bool
-    required: bool
     recovery_codes_left: int
 
 
@@ -99,7 +95,6 @@ def user_out(doc: dict) -> UserOut:
         disabled=bool(doc.get("disabled")),
         must_change_password=bool(doc.get("must_change_password")),
         mfa_enabled=bool((doc.get("mfa") or {}).get("enabled")),
-        mfa_setup_required=mfa_setup_required(doc),
         created_at=doc.get("created_at"),
         last_login_at=doc.get("last_login_at"),
     )

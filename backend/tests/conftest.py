@@ -26,7 +26,8 @@ TEST_DB = "netmap_test"
 # A fixed Fernet key used only by the test suite.
 TEST_VAULT_KEY = "dGVzdC1vbmx5LWtleS1kby1ub3QtdXNlLWFueXdoZXI="
 # Encrypts TOTP secrets in tests (MFA_ENCRYPTION_KEY), and the TOTP secret of every test
-# account that has MFA. Admins must have MFA, so add_user() enrols them by default.
+# account that has MFA. add_user() enrols admins by default so the MFA sign-in path stays
+# covered; MFA itself is optional for every role.
 TEST_MFA_KEY = "dGVzdC1vbmx5LW1mYS1rZXktbmV2ZXItdXNlLWl0ISE="
 TOTP_SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
 # Passes the password policy; used for every test account.

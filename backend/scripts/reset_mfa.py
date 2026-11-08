@@ -3,7 +3,7 @@
 For the case the admin UI can't handle: the only admin lost their phone *and* their recovery
 codes, so nobody can sign in to press "Reset MFA". Running this needs the database connection
 string (MONGODB_URI), which is a stronger credential than any NetMap account, so it doesn't
-weaken the second factor. Admins must set MFA up again at their next sign-in.
+weaken the second factor. The user can set MFA up again from their account page.
 
 From the backend folder:
     python scripts/reset_mfa.py <username>

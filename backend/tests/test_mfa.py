@@ -158,16 +158,14 @@ def enrol(client, sync_db, username="admin1", role="admin") -> tuple[str, str, l
     return enabled.json()["session"]["csrf_token"], secret, enabled.json()["recovery_codes"]
 
 
-def test_admin_without_mfa_must_set_it_up(client, sync_db):
+def test_admin_without_mfa_can_use_the_app_and_set_it_up(client, sync_db):
     add_user(sync_db, "admin1", "admin", mfa=False)
-    token = login(client, "admin1")  # no MFA yet: password only
+    token = login(client, "admin1")  # no MFA: password only
     me = client.get("/api/auth/me").json()
-    assert me["user"]["mfa_setup_required"] is True
+    assert "mfa_setup_required" not in me["user"]
     for path in ("/api/users", "/api/devices", "/api/dashboard/summary"):
-        response = client.get(path)
-        assert response.status_code == 403 and response.json()["detail"] == "mfa_setup_required"
-    assert client.get("/api/auth/mfa").json() == {"enabled": False, "required": True,
-                                                  "recovery_codes_left": 0}
+        assert client.get(path).status_code == 200  # MFA is optional (2026-11-08)
+    assert client.get("/api/auth/mfa").json() == {"enabled": False, "recovery_codes_left": 0}
 
     setup = client.post("/api/auth/mfa/setup", headers=csrf(token)).json()
     assert re.fullmatch(r"[A-Z2-7]{32}", setup["secret"])
@@ -232,15 +230,14 @@ def test_setup_needs_csrf(client, sync_db):
     assert client.post("/api/auth/mfa/setup").status_code == 403
 
 
-def test_promoted_user_is_stopped_until_enrolled(client, sync_db):
+def test_promoted_user_is_not_forced_to_enrol(client, sync_db):
     add_user(sync_db, "admin1", "admin")
     add_user(sync_db, "erin", "engineer")
     admin_token = login(client, "admin1")
     erin = sync_db.users.find_one({"username": "erin"})
     client.patch(f"/api/users/{erin['_id']}", headers=csrf(admin_token), json={"role": "admin"})
     login(client, "erin")
-    response = client.get("/api/devices")
-    assert response.status_code == 403 and response.json()["detail"] == "mfa_setup_required"
+    assert client.get("/api/users").status_code == 200
 
 
 def test_viewer_may_use_mfa_optionally(client, sync_db):
@@ -288,12 +285,14 @@ def test_new_recovery_codes_replace_old_ones(client, sync_db):
 
 # ---- turning it off / resetting ------------------------------------------------------------
 
-def test_admin_cannot_disable(client, sync_db):
+def test_admin_can_disable(client, sync_db):
     add_user(sync_db, "admin1", "admin")
     token = login(client, "admin1")
+    sync_db.users.update_one({"username": "admin1"}, {"$set": {"mfa.last_step": None}})
     response = client.post("/api/auth/mfa/disable", headers=csrf(token),
                            json={"password": PASSWORD, "code": totp_code()})
-    assert response.status_code == 403
+    assert response.status_code == 204
+    assert "mfa" not in sync_db.users.find_one({"username": "admin1"})
 
 
 def test_disable_needs_password_and_code(client, sync_db):

@@ -81,22 +81,21 @@ describe("two-step sign-in", () => {
     expect(JSON.parse(verify[1].body)).toEqual({ recovery_code: "abcde-fghjk" });
   });
 
-  it("forces an admin without MFA through setup and shows recovery codes before continuing", async () => {
+  it("lets a user turn MFA on from the account page and shows recovery codes first", async () => {
+    let enabled = false;
     mockApi({
       ...signedIn("admin"),
-      "GET /api/auth/me": { user: { ...USERS.admin, mfa_setup_required: true }, csrf_token: "c1" },
+      "GET /api/auth/mfa": () => ({ enabled, recovery_codes_left: enabled ? 10 : 0 }),
       "POST /api/auth/mfa/setup": SETUP,
-      "POST /api/auth/mfa/enable": ({ body }) =>
-        body.code === "123456"
-          ? { recovery_codes: CODES, session: { user: { ...USERS.admin, mfa_enabled: true }, csrf_token: "c2" } }
-          : { status: 400, body: { detail: "That code didn't match." } },
+      "POST /api/auth/mfa/enable": ({ body }) => {
+        if (body.code !== "123456") return { status: 400, body: { detail: "That code didn't match." } };
+        enabled = true;
+        return { recovery_codes: CODES, session: { user: { ...USERS.admin, mfa_enabled: true }, csrf_token: "c2" } };
+      },
     });
-    renderAt("/");
+    renderAt("/account/security");
     const user = userEvent.setup();
-    expect(await screen.findByRole("heading", { name: "Set up two-step sign-in" })).toBeInTheDocument();
-    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Set up two-step sign-in" }));
+    await user.click(await screen.findByRole("button", { name: "Set up two-step sign-in" }));
     expect(await screen.findByRole("img", { name: /QR code/ })).toBeInTheDocument();
     expect(screen.getByText("JBSW Y3DP EHPK 3PXP JBSW Y3DP EHPK 3PXP")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Code from the app"), "000000");
@@ -105,22 +104,16 @@ describe("two-step sign-in", () => {
 
     await user.type(screen.getByLabelText("Code from the app"), "123456");
     await user.click(screen.getByRole("button", { name: "Turn on" }));
-    const list = await screen.findByRole("list", { name: "" });
+    const list = (await screen.findByText("ABCDE-FGHJK")).closest("ol");
     expect(within(list).getAllByRole("listitem")).toHaveLength(10);
-    expect(screen.getByText("ABCDE-FGHJK")).toBeInTheDocument();
-    // Still on the setup screen until the user confirms they saved the codes.
-    expect(screen.queryByRole("heading", { name: "Dashboard" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /I have saved these codes/ }));
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByText("Two-step sign-in is on.")).toBeInTheDocument();
   });
 
-  it("goes to the setup screen when the server says MFA setup is required", async () => {
-    mockApi({
-      ...signedIn("admin"),
-      "GET /api/dashboard/summary": { status: 403, body: { detail: "mfa_setup_required" } },
-    });
+  it("does not force an admin without MFA to set it up", async () => {
+    mockApi(signedIn("admin"));
     renderAt("/");
-    expect(await screen.findByRole("heading", { name: "Set up two-step sign-in" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
   });
 
   it("admins see the MFA column and can reset others but not themselves", async () => {
@@ -142,15 +135,14 @@ describe("two-step sign-in", () => {
     expect(within(victor).getByRole("button", { name: "Reset two-step" })).toBeInTheDocument();
   });
 
-  it("admins can't turn MFA off on the account page", async () => {
+  it("admins can turn MFA off on the account page", async () => {
     mockApi({
       ...signedIn("admin"),
-      "GET /api/auth/mfa": { enabled: true, required: true, recovery_codes_left: 2 },
+      "GET /api/auth/mfa": { enabled: true, recovery_codes_left: 2 },
     });
     renderAt("/account/security");
     expect(await screen.findByText(/get new ones below/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Turn off two-step sign-in" })).not.toBeInTheDocument();
-    expect(screen.getByText("Two-step sign-in is required for admin accounts.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Turn off two-step sign-in" })).toBeInTheDocument();
   });
 });
 

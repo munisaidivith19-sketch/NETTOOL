@@ -157,7 +157,8 @@ conflicts with them, stop and ask.
 - Session expiry: 8 hours absolute, 30 minutes idle. Logout invalidates the session server-side.
 - **Brute-force protection**: rate-limit login per IP and per username; lock account for
   15 minutes after 5 failed attempts. Generic error message ("Invalid username or password").
-- **TOTP MFA** (pyotp) required for admin accounts (phase 8).
+- **TOTP MFA** (pyotp) is **optional** for every role, admins included (owner decision
+  2026-11-08: password-only sign-in for now; see docs/known-limitations.md).
 - First admin created from `ADMIN_USERNAME` / `ADMIN_PASSWORD` env vars only when no users exist;
   force password change on first login.
 

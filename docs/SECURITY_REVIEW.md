@@ -19,7 +19,7 @@ Status: **PASS** = done and tested. **PARTIAL** = only part of the rule was done
 | 8 h absolute, 30 min idle, server-side logout | PASS | `backend/app/security/sessions.py:16-17`, check at `:62`; logout deletes the session at `backend/app/api/auth.py:141` |
 | Rate limit per IP and per username; lock for 15 min after 5 failures | PASS | `backend/app/security/rate_limit.py:16-19`; `backend/app/api/auth.py:96`, `:110`, `:116` |
 | Generic error message | PASS | `backend/app/api/auth.py:36`; one message for unknown user, bad password, locked or disabled |
-| **TOTP MFA required for admins** | FAIL → **PASS** | new: `backend/app/security/mfa.py`, `backend/app/api/mfa.py`; enforced in `backend/app/security/rbac.py:104`; `backend/tests/test_mfa.py` |
+| **TOTP MFA required for admins** | FAIL → PASS → **WAIVED** (owner, 2026-11-08) | MFA kept but optional: `backend/app/security/mfa.py`, `backend/app/api/mfa.py`; `backend/tests/test_mfa.py` |
 | MFA failures count toward the lockout | new → PASS | `backend/app/api/mfa.py:60`; the password-change form counts too (`backend/app/api/auth.py:166`) |
 | First admin from env only when no users exist; forced password change | PASS | `backend/app/services/bootstrap.py:14`, `backend/app/services/users.py:35` |
 

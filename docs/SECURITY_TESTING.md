@@ -91,9 +91,8 @@ once (for example over your shoulder) can't be used again.
 5. Choose *Use a recovery code*, type one of your saved codes, and sign in. A banner shows
    how many codes are left. Sign out, then try the same recovery code again: refused.
 6. Type 5 wrong codes in a row: the account locks, exactly like 5 wrong passwords.
-7. **Optional, as an admin:** promote `engineer1` to admin in Admin → Users. When engineer1
-   next clicks anything, they get the forced MFA setup screen. Every other admin request is
-   refused with `403 mfa_setup_required` until they set it up.
+7. Turn it off again under **Two-step** → *Turn off* (password + current code). MFA is
+   optional for every role, admins included (owner decision 2026-11-08).
 
 **Audit log:**
 - `auth.mfa_challenge`

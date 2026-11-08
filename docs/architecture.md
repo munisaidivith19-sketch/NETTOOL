@@ -346,8 +346,8 @@ engineer-only "Correct type" control. AI text and query results are rendered as 
 | Part | Where | What |
 |---|---|---|
 | TOTP | `security/mfa.py` | secrets (Fernet, `MFA_ENCRYPTION_KEY`), codes with replay check, SHA-256 recovery codes, QR code as 0/1 rows (segno) |
-| Routes | `api/mfa.py`, `api/auth.py`, `api/users.py` | code step, setup, enable, recovery codes, disable (not admins), admin reset |
-| Enforcement | `security/rbac.py` | `mfa_setup_required` blocks admins without MFA on every role-checked route; `mfa_challenge` is a new access marker |
+| Routes | `api/mfa.py`, `api/auth.py`, `api/users.py` | code step, setup, enable, recovery codes, disable, admin reset |
+| Enforcement | `security/rbac.py` | MFA is optional for every role (2026-11-08); `mfa_challenge` is the access marker for the code step |
 | Security alerts | `services/security_events.py` | bounded audit for unauthenticated failures, `security` alerts |
 | Ask NetMap | `api/ai.py` | refuses in production without the read-only database user |
 | Scripts | `backend/scripts/reset_mfa.py`, `backend/scripts/demo_agent_request.py`, `scripts/security-check.ps1` | last-admin recovery, replay demo, all scanners and tests |

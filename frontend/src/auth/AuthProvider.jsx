@@ -39,8 +39,6 @@ export function AuthProvider({ children }) {
       unauthorized: () => signOutLocally("expired"),
       passwordChangeRequired: () =>
         setState((s) => (s.user ? { ...s, user: { ...s.user, must_change_password: true } } : s)),
-      mfaSetupRequired: () =>
-        setState((s) => (s.user ? { ...s, user: { ...s.user, mfa_setup_required: true } } : s)),
     });
   }, [signOutLocally]);
 
@@ -71,8 +69,8 @@ export function AuthProvider({ children }) {
 
   /*
    * Turning MFA on replaces the session. The new CSRF token is needed at once, but the user
-   * object is updated only later (finishMfaSetup), so the forced setup screen stays up while
-   * the recovery codes are shown.
+   * object is updated only later (finishMfaSetup), so the setup panel stays up while the
+   * recovery codes are shown.
    */
   const enableMfa = useCallback(async (code) => {
     const result = await mfaApi.enable(code);

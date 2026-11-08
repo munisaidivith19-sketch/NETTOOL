@@ -32,7 +32,7 @@ that is shown to you, and **Explain** buttons describe alerts, compliance findin
 diffs in plain language. Both work without any API key; a free Gemini/Groq key or a local
 Ollama model is optional. A simulated six-device campus (SNMP plus a fake Cisco SSH server)
 lets you run everything without any hardware. Phase 8 is a whole-project security review. It
-adds **two-step sign-in (TOTP MFA)**, required for admins, with single-use recovery codes. It
+adds optional **two-step sign-in (TOTP MFA)** with single-use recovery codes. It
 adds **security alerts** for repeated failed sign-ins and bad agent signatures, with a cap so a
 flood can't fill the audit log, plus tests that check every route for roles, NoSQL injection
 and input limits, and one script that runs every scanner and test suite. The security
@@ -85,11 +85,11 @@ In `.env`, set at least:
 - `MFA_ENCRYPTION_KEY`. Required as well (Phase 8): a **different** Fernet key, generated the
   same way. It encrypts the two-step sign-in secrets.
 - `ADMIN_USERNAME` and `ADMIN_PASSWORD`. These create the first admin when the database has no
-  users. Log in with them, change the password when asked, set up two-step sign-in (below),
-  then delete both lines.
+  users. Log in with them, change the password when asked, then delete both lines.
 
 ### Two-step sign-in (MFA)
-Admins must use it; other users can turn it on under **Two-step** in the top bar.
+Optional for every role, admins included (owner decision 2026-11-08). Turn it on or off
+under **Two-step** in the top bar.
 1. After the password, NetMap shows a QR code. Scan it with any authenticator app (Google or
    Microsoft Authenticator, Aegis, 1Password…), or type the key shown under it.
 2. Enter the 6-digit code. NetMap shows **10 recovery codes once**. Store them somewhere safe:

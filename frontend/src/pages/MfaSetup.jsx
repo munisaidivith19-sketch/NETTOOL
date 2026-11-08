@@ -5,34 +5,6 @@ import { CodeField, MfaEnrol, RecoveryCodes } from "../components/mfaParts.jsx";
 import { ConfirmButton, ErrorNote, Loading, PageHead, Panel, SuccessNote } from "../components/ui.jsx";
 import { useResource } from "../hooks/useResource.js";
 
-/* Full screen for an admin who has no two-step sign-in yet: nothing else works until it is on. */
-export function ForcedMfaSetup() {
-  const { user, enableMfa, finishMfaSetup, logout } = useAuth();
-  return (
-    <div className="auth-screen">
-      <div className="auth-card auth-card-wide" aria-labelledby="mfa-title">
-        <h1 id="mfa-title">Set up two-step sign-in</h1>
-        <p className="muted">
-          Signed in as <strong>{user.username}</strong>. Admin accounts need a second step at sign-in: a code from an
-          app on your phone. A stolen password alone is then not enough.
-        </p>
-        <MfaEnrol
-          username={user.username}
-          onStart={mfaApi.setup}
-          enableMfa={enableMfa}
-          onDone={(result) => finishMfaSetup(result.session)}
-          doneLabel="I have saved these codes – continue"
-        />
-        <div className="auth-foot">
-          <button type="button" className="link-button" onClick={logout}>
-            Sign out
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function NewRecoveryCodes() {
   const [code, setCode] = useState("");
   const [codes, setCodes] = useState(null);
@@ -105,7 +77,7 @@ function TurnOff({ onDone }) {
   );
 }
 
-/* Account page: status, enrol, new recovery codes, and (not for admins) turn off. */
+/* Account page: status, enrol, new recovery codes, and turn off. Optional for every role. */
 export default function MfaSettings() {
   const { user, enableMfa, finishMfaSetup } = useAuth();
   const status = useResource((signal) => mfaApi.status({ signal }), []);
@@ -144,7 +116,7 @@ export default function MfaSettings() {
           <NewRecoveryCodes />
         </Panel>
       )}
-      {data?.enabled && !data.required && (
+      {data?.enabled && (
         <Panel title="Turn off">
           <TurnOff
             onDone={() => {
@@ -154,7 +126,6 @@ export default function MfaSettings() {
           />
         </Panel>
       )}
-      {data?.required && <p className="muted small">Two-step sign-in is required for admin accounts.</p>}
     </>
   );
 }

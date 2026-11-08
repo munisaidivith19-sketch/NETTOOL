@@ -66,8 +66,8 @@ export function RecoveryCodes({ codes }) {
 }
 
 /*
- * Turning two-step sign-in on: scan → type a code → save the recovery codes. Used as the
- * forced screen for admins and on the account page.
+ * Turning two-step sign-in on: scan → type a code → save the recovery codes. Used on the
+ * account page.
  */
 export function MfaEnrol({ username, enableMfa, onStart, onDone, doneLabel }) {
   const [setup, setSetup] = useState(null);

@@ -183,6 +183,10 @@ Phase 6 the only finding is the dnspython one above; Phase 7 adds the Pillow one
   alert whose details change gets a new one.
 
 ## Phase 8 (security hardening)
+- **Admin MFA is optional (owner decision 2026-11-08).** CLAUDE.md 7.1 originally required
+  TOTP for admins; it was relaxed to password-only sign-in. Admin accounts without MFA rely
+  on the password policy, lockout and rate limits only. Re-enable the requirement before a
+  real deployment.
 - **First MFA enrolment is protected only by the password.** A new admin enrols right after
   the forced password change. Someone who knows the initial password and signs in first
   could enrol their own phone. Hand over initial passwords through a separate channel, and

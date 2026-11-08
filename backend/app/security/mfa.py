@@ -125,7 +125,6 @@ def user_status(doc: dict) -> dict:
     mfa = doc.get("mfa") or {}
     enabled = bool(mfa.get("enabled"))
     return {"enabled": enabled,
-            "required": doc.get("role") == "admin",
             "recovery_codes_left": len(mfa.get("recovery", [])) if enabled else 0}
 
 

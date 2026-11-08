@@ -233,11 +233,10 @@ longer opens an admin account.
      `details.mfa = totp | recovery_code`.
    - Every failure gives the same 401 "Invalid or expired code".
 
-**Required for admins.** `require_role` refuses every request from an admin without MFA with
-`403 mfa_setup_required`, after the password-change check. It is evaluated on every request,
-so a user promoted to admin is stopped at once. Only `me`, `logout`, `change-password` and
-the MFA setup routes (`require_session`) still work. The React app shows the forced setup
-screen.
+**Optional for every role.** Until 2026-11-08 admins were forced to enrol (`403
+mfa_setup_required` on every role-checked route). The owner removed that requirement: any
+user, admin included, can turn MFA on or off on the account page. Turning it off still needs
+the password and a current code.
 
 **Enrolment** (`/api/auth/mfa/setup` → `/enable`):
 - Setup creates a pending secret (encrypted, valid 10 minutes). It returns the secret, the

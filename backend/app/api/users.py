@@ -120,8 +120,8 @@ async def reset_password(
 async def reset_mfa(
     request: Request, user_id: UserIdPath, admin: CurrentUser = Depends(require_admin)
 ) -> UserOut:
-    """For a user who lost their phone and their recovery codes. They must set MFA up again
-    (admins at their next sign-in). Not allowed on yourself: otherwise a stolen admin session
+    """For a user who lost their phone and their recovery codes. They can set MFA up again
+    from their account page. Not allowed on yourself: otherwise a stolen admin session
     could remove the second factor of the account it is using."""
     db = request.app.state.db
     doc = await _get_user(request, user_id)

@@ -7,8 +7,7 @@
  *   can read. A reload loses it; the app gets it back from GET /api/auth/me.
  * - Every state-changing request (POST/PATCH/PUT/DELETE) carries it as X-CSRF-Token.
  * - 401 means the session is gone (expired, logged out elsewhere): the app is told so it can
- *   show the login page. 403 "password_change_required" sends the user to the change screen,
- *   and 403 "mfa_setup_required" (an admin without two-step sign-in) to the MFA setup screen.
+ *   show the login page. 403 "password_change_required" sends the user to the change screen.
  */
 
 export class ApiError extends Error {
@@ -20,7 +19,7 @@ export class ApiError extends Error {
 }
 
 let csrfToken = null;
-const handlers = { unauthorized: () => {}, passwordChangeRequired: () => {}, mfaSetupRequired: () => {} };
+const handlers = { unauthorized: () => {}, passwordChangeRequired: () => {} };
 
 export function setCsrfToken(token) {
   csrfToken = token || null;
@@ -31,15 +30,13 @@ export function hasCsrfToken() {
 }
 
 /* The auth layer registers what to do on 401 / forced password change. */
-export function setAuthHandlers({ unauthorized, passwordChangeRequired, mfaSetupRequired }) {
+export function setAuthHandlers({ unauthorized, passwordChangeRequired }) {
   if (unauthorized) handlers.unauthorized = unauthorized;
   if (passwordChangeRequired) handlers.passwordChangeRequired = passwordChangeRequired;
-  if (mfaSetupRequired) handlers.mfaSetupRequired = mfaSetupRequired;
 }
 
 const FIXED_MESSAGES = {
   password_change_required: "You need to change your password first.",
-  mfa_setup_required: "You need to set up two-step sign-in first.",
 };
 
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -105,8 +102,6 @@ export async function request(method, path, { body, query, signal, auth = true }
       handlers.unauthorized();
     } else if (response.status === 403 && data?.detail === "password_change_required") {
       handlers.passwordChangeRequired();
-    } else if (response.status === 403 && data?.detail === "mfa_setup_required") {
-      handlers.mfaSetupRequired();
     }
     throw new ApiError(response.status, data);
   }
