@@ -1,9 +1,10 @@
 # Security review: CLAUDE.md section 7, rule by rule (Phase 8)
 
 Each rule was re-checked against the code. The second column shows what the review found
-**before** Phase 8 and what it is now. Every FAIL and PARTIAL found was fixed in Phase 8,
-except the ones marked **Phase 9**: those depend on the Render / Atlas deployment and can't be
-done or tested locally. Paths are relative to the project root.
+**before** Phase 8 and what it is now. Every FAIL and PARTIAL found was fixed in Phase 8.
+The deployment rules (Atlas, TLS, HSTS behind the proxy, the real client IP) were completed
+in Phase 9; see "Phase 9 additions". Rows marked "re-check on the live URL" were tested in a
+local production rehearsal and are confirmed again after the real deploy. Paths are relative to the project root.
 
 Status: **PASS** = done and tested. **PARTIAL** = only part of the rule was done. **FAIL** = not done.
 
@@ -81,18 +82,27 @@ Status: **PASS** = done and tested. **PARTIAL** = only part of the rule was done
 | Rule | Status | Where |
 |---|---|---|
 | CSP self only, nosniff, X-Frame-Options DENY, frame-ancestors none, Referrer-Policy, Permissions-Policy | PASS | `backend/app/security/http.py:24`, `:64-68` |
-| HSTS | PASS locally; **Phase 9** behind Render's proxy | `backend/app/security/http.py:75` (production only) |
+| HSTS | PASS (production rehearsal 2026-11-08); re-check on the live URL | `backend/app/security/http.py:75` (production only) |
 | CSRF for cookie-authenticated writes | PASS | token: `backend/app/security/csrf.py:25-29`; Origin and Content-Type checks: `:39-62` |
 | CORS off (same origin) | PASS | no CORS middleware in `backend/app/main.py` |
 | No stack traces to clients, request ID | PASS | `backend/app/main.py:125-130` |
 | `/docs` and `/openapi.json` off in production | PASS | `backend/app/main.py:113-120` |
 
+## Phase 9 additions
+
+| Rule | Status | Where |
+|---|---|---|
+| 7.1: rate limiting uses the real client IP behind the proxy | FAIL → **PASS** | uvicorn's `--forwarded-allow-ips=*` would take the client-chosen leftmost `X-Forwarded-For` entry. The app counts trusted hops from the right instead (`backend/app/security/client_ip.py`); `tests/test_client_ip.py` shows that rotating forged entries still hit the 429 |
+| 7.7: docs off in production | PARTIAL → **PASS** | with the dashboard served, `/docs` and `/openapi.json` returned 200 (the dashboard page, not the schema). They now return 404 (`backend/app/frontend.py`, `tests/test_health.py`) |
+| 7.7: no internal details | PASS | `--no-server-header` in `render.yaml` |
+| 7.6: no secrets in git | PASS | `scripts/scan_git_history.py` (every added line in history) and `scripts/check_render_yaml.py`, both in `security-check.ps1 -Release` |
+
 ## 7.8 Database
 
 | Rule | Status | Where |
 |---|---|---|
-| Atlas least-privilege users, network access limited to Render | **Phase 9** | documented in Phase 9's `docs/DEPLOYMENT.md` |
-| TLS to Atlas | **Phase 9** | default for `mongodb+srv://` URIs |
+| Atlas least-privilege users, network access limited to Render | PASS (documented); confirmed when the cluster is created | `docs/DEPLOYMENT.md` §1 and §4: `netmap_app` readWrite@netmap, `netmap_ai_ro` read@netmap, Render Singapore ranges only |
+| TLS to Atlas | PASS | `mongodb+srv://` is TLS by default; production refuses a non-TLS remote URI (`backend/app/config.py`, `uses_tls`; `tests/test_config.py`) |
 | Local MongoDB on 127.0.0.1 only | PASS | `bindIp: 127.0.0.1` in the local `mongod.cfg` (checked 2026-11-08) |
 | TTL indexes on metrics and sessions | PASS | `backend/app/db.py` (also new TTLs on `mfa_challenges` and `security_events`) |
 

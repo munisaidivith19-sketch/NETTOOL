@@ -98,6 +98,7 @@ STRIDE = **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosur
 | R | A user denies an action | `audit_log` records who, what, target, when, source IP, result and request ID for logins, MFA, users, agents, subnets and changes; the app only inserts | `services/audit.py` |
 | I | Error details leak internals | Generic error bodies with a request ID; details stay in the server log; `/docs` and `/openapi.json` are off in production | `main.py`, `security/http.py` |
 | I | A viewer reads admin data | RBAC on every route, deny by default, tested for every route × role | `security/rbac.py`, `tests/test_rbac.py` |
+| S | A forged `X-Forwarded-For` to dodge the per-IP limit or fake the audit IP | The app ignores uvicorn's proxy handling and counts `TRUSTED_PROXY_HOPS` entries from the right, only when the peer is Render's private proxy | `security/client_ip.py`, `tests/test_client_ip.py` |
 | D | Huge bodies or deep JSON | 2 MB body limit (10 MB for agent reports); every string and list has a maximum size | `security/http.py:16-19`, `tests/test_input_limits.py` |
 | D | Audit-log flooding with bad signatures or logins | Failures are counted per IP and 10-minute window. Only the first 20 are audited in full, then one "suppressed" entry. A `security` alert opens | `services/security_events.py` |
 | D | Ask NetMap used as a DoS amplifier | Per-user rate limit; at most 10 pipeline stages; 100 results; 4 KB query; server-side `maxTimeMS` | `api/ai.py`, `ai/query_guard.py` |
@@ -108,12 +109,12 @@ STRIDE = **S**poofing, **T**ampering, **R**epudiation, **I**nformation disclosur
 
 | | Threat | Control | Code / setting |
 |---|---|---|---|
-| S | Someone connects directly to the database | Local: `bindIp 127.0.0.1`. Atlas: Network Access limited to Render's outbound IPs, never `0.0.0.0/0` (Phase 9) | `mongod.cfg`, `docs/DEPLOYMENT.md` (Phase 9) |
+| S | Someone connects directly to the database | Local: `bindIp 127.0.0.1`. Atlas: Network Access limited to Render's Singapore outbound ranges, never `0.0.0.0/0`; TLS required in production | `mongod.cfg`, `docs/DEPLOYMENT.md` §1 and §4, `backend/app/config.py` |
 | T | AI-generated queries write data | Ask NetMap uses the read-only user `netmap_ai_ro` and runs only allowlisted aggregate stages. In production it refuses to run without that user | `ai/query_guard.py`, `api/ai.py:55` |
 | R | Audit entries are removed | The app has no update or delete path for `audit_log`. A database admin still could, which is accepted (see section 5) | `services/audit.py` |
 | I | A database dump is stolen | No plain secrets in it: bcrypt password hashes; SHA-256 session-token and recovery-code hashes; agent keys and TOTP secrets Fernet-encrypted with keys kept **only in the Render environment**; device credentials never stored; configs masked | `security/agent_auth.py`, `security/mfa.py` |
 | D | The database fills up (Atlas M0: 512 MB) | TTL indexes on metrics (7 d), sessions, login attempts, nonces, MFA challenges and security events; config history capped at 50 versions per device; bounded audit on floods | `db.py` |
-| E | The app's DB user can do too much | `netmap_app` has `readWrite` on `netmap` only, no admin roles (Phase 9) | `docs/DEPLOYMENT.md` (Phase 9) |
+| E | The app's DB user can do too much | `netmap_app` has `readWrite` on `netmap` only, no admin roles | `docs/DEPLOYMENT.md` §1 |
 
 ### 3.4 Browser (React)
 
@@ -156,8 +157,15 @@ ones:
 - **Account lockout can be used to annoy.** Anyone who knows a username can lock it for
   15 minutes. MFA failures count too. Per-IP limits slow this down. It is the usual trade-off
   against password guessing.
-- **The per-IP limit and the audit IP use the connecting address.** Behind Render's proxy,
-  the real client IP needs trusted-proxy handling (Phase 9).
+- **The real client IP relies on Render's proxy layout.** `TRUSTED_PROXY_HOPS=2` takes the
+  second `X-Forwarded-For` entry from the right, the one Cloudflare adds, so a client can't
+  pick its own address (`backend/app/security/client_ip.py`). This depends on the chain
+  staying as it is. A longer chain only makes addresses wrong (shared). A shorter one,
+  without Cloudflare, would make them forgeable again until the setting is changed to 1.
+  `/api/admin/request-info` shows what the server sees; it is checked after each deploy.
+- **Render's outbound IPs are shared per region.** The Atlas allowlist keeps the rest of the
+  internet out, but other Render services in Singapore can reach the cluster. The database
+  password is the barrier there.
 - **Encryption keys are single points of failure.** If `AGENT_KEY_ENCRYPTION_KEY` or
   `MFA_ENCRYPTION_KEY` leaks *together with* the database, those secrets can be decrypted.
   If a key is lost, every agent key must be re-created, or every MFA user reset. Both keys

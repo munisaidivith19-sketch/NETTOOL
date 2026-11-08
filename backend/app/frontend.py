@@ -5,6 +5,9 @@ Same origin means the session cookie can be httpOnly + SameSite=Strict and no CO
 - top-level files   e.g. favicon.svg, only names that exist in dist at startup
 - anything else     index.html, so React Router deep links like /subnets/abc work on reload
 - /api/*            never the app: an unknown API path stays a JSON 404
+- /docs, /redoc, /openapi.json
+                    never the app either: in production these are switched off and must
+                    answer 404, not 200 with the dashboard (found in the Phase 9 check)
 """
 
 from pathlib import Path
@@ -15,6 +18,8 @@ from fastapi.staticfiles import StaticFiles
 
 # The build output is immutable per file name (Vite puts a content hash in it).
 ASSET_CACHE = "public, max-age=31536000, immutable"
+# Paths owned by the API. When FastAPI doesn't serve them, they are 404, never index.html.
+RESERVED = {"api", "docs", "redoc", "openapi.json"}
 
 
 class CachedStaticFiles(StaticFiles):
@@ -37,7 +42,7 @@ def mount_frontend(app: FastAPI, dist: Path | None) -> bool:
 
     @app.get("/{path:path}", include_in_schema=False)
     async def spa(path: str) -> FileResponse:
-        if path == "api" or path.startswith("api/"):
+        if path.split("/", 1)[0] in RESERVED:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Not found")
         if path in top_level:
             return FileResponse(top_level[path])

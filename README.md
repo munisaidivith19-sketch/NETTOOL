@@ -4,7 +4,7 @@ AI-assisted network mapping, IP address management and monitoring for small and 
 organizations (colleges, hospitals, SMEs). See `CLAUDE.md` for the full brief and security rules,
 and `PHASE_PROMPTS.md` for the build plan.
 
-**Status: Phase 8 done** (security hardening; see the end of this summary). The backend has
+**Status: Phase 9 done:** ready to deploy to Render + MongoDB Atlas (`docs/DEPLOYMENT.md`). The backend has
 accounts, roles, sessions, CSRF protection, an audit
 log and HMAC-signed agent authentication (see `docs/auth-design.md`). The agent discovers the
 network: it pings ranges, polls devices over SNMPv3 (system info, interfaces, IPv4/IPv6
@@ -38,6 +38,12 @@ flood can't fill the audit log, plus tests that check every route for roles, NoS
 and input limits, and one script that runs every scanner and test suite. The security
 documents are `docs/SECURITY.md` (threat model), `docs/SECURITY_REVIEW.md` (every CLAUDE.md
 rule checked) and `docs/SECURITY_TESTING.md` (how to demonstrate each control live).
+Phase 9 makes it deployable for free:
+- one Render web service builds the dashboard and serves it with the API
+- MongoDB Atlas M0 holds the data, with two least-privilege users
+- the agent runs on your laptop
+- the real client IP is read safely behind Render's proxy
+- pre-deployment checks scan the git history and `render.yaml` for secrets
 
 ```
 agent/     runs inside the private network; discovers and polls devices (Python)
@@ -62,7 +68,7 @@ Use `MONGODB_URI=mongodb://127.0.0.1:27017`.
 
 **MongoDB Atlas (production).** Create a free M0 cluster and a database user, then use its
 `mongodb+srv://...` connection string as `MONGODB_URI`. Nothing else changes. Least-privilege
-users and network access rules are covered in Phase 9 (`docs/DEPLOYMENT.md`).
+users and network access rules are in `docs/DEPLOYMENT.md`.
 
 ## 2. Backend
 ```powershell
@@ -120,6 +126,7 @@ Main API routes:
 - `GET /api/devices/{id}/metrics?if_index=&hours=` (any role): traffic history of an uplink or
   IP interface (7 days kept)
 - `GET /api/admin/notifications`, `POST /api/admin/notifications/test` (admin)
+- `GET /api/admin/request-info` (admin, Phase 9): the client IP the server sees behind a proxy
 - Configuration (Phase 6):
   - `GET /api/configs` and `GET /api/devices/{id}/compliance` (any role): last backup,
     compliance score and findings, "unconfigured" flag. No config text.
@@ -352,6 +359,19 @@ map lists the same links as text.
 
 Buttons a role can't use are hidden, but that is only convenience: the backend checks the
 role on every request.
+
+## 5. Deploy (Render + Atlas, free)
+Step by step: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md). In short:
+1. Run `scripts\security-check.ps1 -Release`.
+2. Create an Atlas M0 cluster in Singapore, with users `netmap_app` (readWrite) and
+   `netmap_ai_ro` (read).
+3. On Render: New → Blueprint → this repository. Paste the secrets it asks for.
+4. Add Render's outbound ranges to Atlas Network Access, never `0.0.0.0/0`.
+5. Sign in, change the password, set up MFA, then remove `ADMIN_PASSWORD`.
+6. Check `/api/admin/request-info` shows your own IP.
+7. Point the agent's `API_URL` at the service.
+
+The free service sleeps after 15 minutes. Open `/health` a couple of minutes before a demo.
 
 ## Tests and checks
 | Part | Command (inside the folder, venv active) |

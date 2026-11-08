@@ -30,3 +30,13 @@ def test_docs_disabled_in_production(sync_db):
     with TestClient(create_app(make_settings(env="production"))) as c:
         for path in ("/docs", "/redoc", "/openapi.json"):
             assert c.get(path).status_code == 404, path
+
+
+def test_docs_stay_404_when_the_dashboard_is_served(sync_db, tmp_path):
+    # The dashboard's catch-all route must not answer these with index.html (a 200).
+    (tmp_path / "index.html").write_text("<!doctype html><title>NetMap</title>")
+    with TestClient(create_app(make_settings(env="production", frontend_dist=tmp_path))) as c:
+        assert c.get("/").status_code == 200
+        assert c.get("/subnets/abc").status_code == 200
+        for path in ("/docs", "/redoc", "/openapi.json", "/docs/oauth2-redirect"):
+            assert c.get(path).status_code == 404, path

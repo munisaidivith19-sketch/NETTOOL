@@ -10,14 +10,25 @@ from typing import Any
 from fastapi import Request
 from pymongo.asynchronous.database import AsyncDatabase
 
+from app.security import client_ip as proxy_ip
 from app.security.sessions import utcnow
 
 logger = logging.getLogger("netmap.audit")
 
 
 def client_ip(request: Request) -> str:
-    # Phase 9 adds trusted-proxy handling so this is the real client IP behind Render's proxy.
-    return request.client.host if request.client else "unknown"
+    """The real client address: used by the rate limits, the audit log and sessions. Behind
+    Render's proxy it comes from X-Forwarded-For, counted from the right (see
+    security/client_ip.py), so a client can't choose its own address."""
+    cached = getattr(request.state, "client_ip", None)
+    if cached is None:
+        cached, how = proxy_ip.resolve(
+            request.client.host if request.client else None,
+            request.headers.getlist("x-forwarded-for"),
+            request.app.state.settings.trusted_proxy_hops)
+        proxy_ip.warn_once(how)
+        request.state.client_ip = cached
+    return cached
 
 
 def user_actor(user: Any) -> dict:

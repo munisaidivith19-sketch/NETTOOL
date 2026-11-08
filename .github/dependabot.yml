@@ -1,13 +1,32 @@
 version: 2
+# The project runs on Python 3.10 (see docs/known-limitations.md). These packages have dropped
+# 3.10 in the versions ignored below, so those updates can't be installed. Ignoring them only
+# stops pull requests that would break the build; a vulnerability in a pinned version is still
+# reported by pip-audit (scripts/security-check.ps1) and recorded in known-limitations.md.
+# Remove these rules when the project moves to Python 3.12+.
 updates:
   - package-ecosystem: pip
     directory: /backend
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: pymongo
+        versions: [">=4.19"]
+      - dependency-name: pydantic-settings
+        versions: [">=2.16"]
+      - dependency-name: pytest      # 9.2 crashes on the dev machine's Python 3.10.0
+        versions: [">=9.2"]
   - package-ecosystem: pip
     directory: /agent
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: pydantic-settings
+        versions: [">=2.16"]
+      - dependency-name: scikit-learn
+        versions: [">=1.8"]
+      - dependency-name: pytest
+        versions: [">=9.2"]
   - package-ecosystem: npm
     directory: /frontend
     schedule:

@@ -30,10 +30,9 @@ Phase 6 the only finding is the dnspython one above; Phase 7 adds the Pillow one
 `snmpsim` and `pysmi` (the simulator) are dev-only.
 
 ## Phase 1 (authentication)
-- **Client IP behind a proxy.** Rate limiting and the audit log use the connecting address. On
-  Render that is Render's proxy, not the real client, until Phase 9 adds trusted-proxy handling
-  (`uvicorn --proxy-headers --forwarded-allow-ips`). Until then the per-IP limit would apply to
-  all users together in production.
+- ~~Client IP behind a proxy~~: solved in Phase 9 with `TRUSTED_PROXY_HOPS`, which counts
+  `X-Forwarded-For` entries from the right. It doesn't use uvicorn's `--forwarded-allow-ips`,
+  which would trust a client-chosen entry; see the Phase 9 section below.
 - **Account lockout can be abused** to lock a known username for 15 minutes (a small denial of
   service). This is the usual trade-off of lockouts; the per-IP limit slows it down, and MFA in
   Phase 8 reduces the value of guessing anyway.
@@ -103,7 +102,7 @@ Phase 6 the only finding is the dnspython one above; Phase 7 adds the Pillow one
   dashboard's "last agent check-in" tile turns to a warning after 15 minutes.
 - **Notifications for IPAM-triggered alerts wait for the next agent report.** Alerts opened
   by a manual reservation or subnet change are queued and sent after the next report.
-- **SMTP on Render's free tier** may be blocked for outgoing mail ports; use Telegram there.
+- **SMTP on Render's free tier is blocked** (ports 25, 465 and 587, confirmed in Phase 9); use Telegram there.
 - **Rates need two readings.** The first cycle after start-up or a device reboot shows no
   rate. A 32-bit counter that wraps more than once between polls can't be corrected (busy
   1 Gbit/s ports wrap every ~34 s); such readings are dropped when they exceed the port speed.
@@ -210,4 +209,36 @@ Phase 6 the only finding is the dnspython one above; Phase 7 adds the Pillow one
 - **Dev environment only:** the virtual environments came with setuptools 57.4.0, which
   pip-audit flags. It is not a runtime dependency and isn't installed on Render; it is
   upgraded in the local venvs.
+
+## Phase 9 (deployment)
+- **The real client IP depends on Render's proxy chain.** Today it is client → Cloudflare →
+  Render's proxy, so `TRUSTED_PROXY_HOPS=2`. Render doesn't document this layout. If it
+  changes, the rate limit and the audit log would see Cloudflare's or Render's address.
+  `/api/admin/request-info` shows what the server sees. If the chain gets **longer** (an
+  extra proxy), the app sees a proxy's shared address: the per-IP limit gets stricter, not
+  weaker. If it gets **shorter** (for example, Render stops using Cloudflare), the second
+  entry from the right would be one the client wrote, and forged addresses would work
+  again until `TRUSTED_PROXY_HOPS` is set to 1. So re-check request-info after deploys and
+  whenever Render announces network changes; `chosen_by` should be `forwarded` and
+  `client_ip` your own address.
+- **Render's outbound IPs are shared** by every Render service in the Singapore region. The
+  Atlas allowlist narrows access to that region; the database password is what stops other
+  Render customers.
+- **Free-plan limits:**
+  - the service sleeps after 15 minutes idle; a cold start takes about a minute
+  - 750 instance hours a month
+  - Render may restart the service at any time
+  - no persistent disk: nothing is stored on the service itself; everything lives in Atlas
+- **No e-mail on the free plan.** Outgoing SMTP (ports 25, 465 and 587) is blocked, so e-mail
+  notifications only work when self-hosted. Use Telegram on Render.
+- **Atlas M0 has no automatic backups** and offers 512 MB of storage. Export with
+  `mongodump` before risky changes (docs/DEPLOYMENT.md §8). The TTL indexes and the audit
+  flood cap keep usage down.
+- **Render runs Python 3.10.22, the dev machine 3.10.0.** Both are 3.10, and the pins are
+  chosen for it, but bugs fixed between those releases (like the pytest 9.2 crash) can make
+  the two behave slightly differently. Upgrading the dev machine to 3.10.22 or later removes
+  the gap.
+- **Free-tier services aren't for real patient or production data.** Atlas M0 and Render
+  Free have no SLA. They are for demos and evaluation; a hospital deployment would self-host
+  or use paid tiers.
 

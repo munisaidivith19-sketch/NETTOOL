@@ -1,0 +1,77 @@
+# Render Blueprint for NetMap (Phase 9). Step-by-step guide: docs/DEPLOYMENT.md.
+#
+# One free web service runs FastAPI and serves the built React app from the same origin, so
+# the browser needs no CORS and the httpOnly session cookie just works. Render's native Python
+# runtime has Node and npm during the build, which builds the frontend in the same service.
+# The agent runs inside your network, never on Render; scheduled jobs live in the agent.
+#
+# Secrets are `sync: false`: Render asks for each value once, when the Blueprint is created,
+# and they never appear in this file or in git. Later Blueprint syncs ignore them, so a value
+# added afterwards goes in the dashboard (service → Environment).
+
+services:
+  - type: web
+    name: netmap
+    runtime: python
+    plan: free
+    region: singapore          # the same region as the Atlas cluster (AWS ap-southeast-1)
+    healthCheckPath: /health   # public; reports only ok / unavailable
+    autoDeployTrigger: commit
+    buildFilter:
+      # Changes to the agent, docs or lab files don't need a redeploy.
+      paths:
+        - backend/**
+        - frontend/**
+        - templates/**
+        - render.yaml
+      ignoredPaths:
+        - backend/tests/**
+        - frontend/src/__tests__/**
+    # node --version goes into the build log, to confirm NODE_VERSION was used.
+    # --include=dev: Vite is a dev dependency; keep it even if NODE_ENV=production is ever set.
+    buildCommand: >-
+      node --version &&
+      pip install -r backend/requirements.txt &&
+      npm ci --include=dev --prefix frontend &&
+      npm run build --prefix frontend
+    # One worker keeps memory well under the free plan's 512 MB.
+    # --no-proxy-headers: the app works out the client IP itself (TRUSTED_PROXY_HOPS below);
+    #   uvicorn's own option would trust the leftmost X-Forwarded-For entry, which the client
+    #   chooses.
+    # --no-server-header: don't advertise the server software and version.
+    startCommand: >-
+      cd backend &&
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+      --no-proxy-headers --no-server-header
+    envVars:
+      - key: ENV
+        value: production          # Secure cookies + HSTS, API docs off, production checks
+      - key: PYTHON_VERSION
+        value: 3.10.22             # the last Python 3.10 release (see docs/known-limitations.md)
+      - key: NODE_VERSION
+        value: 24.22.1
+      - key: MONGODB_DB
+        value: netmap
+      - key: TRUSTED_PROXY_HOPS
+        value: "2"                 # Cloudflare + Render's proxy; check /api/admin/request-info
+      - key: LLM_PROVIDER
+        value: none                # set to gemini or groq and fill LLM_API_KEY to use a model
+      # ---- secrets: entered in the dashboard, never committed ----
+      - key: MONGODB_URI           # Atlas user netmap_app (readWrite on netmap)
+        sync: false
+      - key: AI_MONGODB_URI        # Atlas user netmap_ai_ro (read on netmap); Ask NetMap needs it
+        sync: false
+      - key: AGENT_KEY_ENCRYPTION_KEY   # Fernet key; generate it yourself (DEPLOYMENT.md)
+        sync: false
+      - key: MFA_ENCRYPTION_KEY         # a different Fernet key
+        sync: false
+      - key: ADMIN_USERNAME        # first admin only; remove both after the first sign-in
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN    # optional; e-mail (SMTP) is blocked on Render's free plan
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: LLM_API_KEY           # optional
+        sync: false

@@ -2,11 +2,13 @@
 # Run from the project root:   powershell -ExecutionPolicy Bypass -File scripts\security-check.ps1
 # Needs the backend and agent .venv folders and frontend\node_modules (see README.md), and the
 # local MongoDB service for the backend tests. Add -SkipTests for the scanners only.
+# Add -Release before a deployment (docs/DEPLOYMENT.md checklist): it also requires a clean
+# git working tree, scans the whole git history for committed secrets and checks render.yaml.
 #
 # pip-audit lists the known findings that are accepted in docs/known-limitations.md
 # (dnspython, Pillow, filelock); anything new in its output needs a fix or a written reason.
 
-param([switch]$SkipTests)
+param([switch]$SkipTests, [switch]$Release)
 
 $ErrorActionPreference = "Continue"
 $root = Split-Path -Parent $PSScriptRoot
@@ -34,6 +36,18 @@ Step "agent: ruff"         "agent"    { & $py -m ruff check . }
 Step "agent: bandit"       "agent"    { & $py -m bandit -q -r netmap_agent simulation }
 Step "agent: pip-audit"    "agent"    { & $py -m pip_audit -r requirements.txt }
 Step "frontend: npm audit" "frontend" { npm audit --omit=dev }
+Step "scripts: ruff"       "."        { & "backend\$py" -m ruff check scripts --config backend\pyproject.toml }
+Step "scripts: bandit"     "."        { & "backend\$py" -m bandit -q -r scripts }
+
+if ($Release) {
+    Step "release: clean git tree" "." {
+        $dirty = git status --porcelain
+        if ($dirty) { $dirty; Write-Host "Commit or remove these first."; $global:LASTEXITCODE = 1 }
+        else { "Working tree clean."; $global:LASTEXITCODE = 0 }
+    }
+    Step "release: secrets in git history" "." { & "backend\$py" scripts\scan_git_history.py }
+    Step "release: render.yaml" "." { & "backend\$py" scripts\check_render_yaml.py }
+}
 
 if (-not $SkipTests) {
     Step "backend: pytest"  "backend"  { & $py -m pytest -q -p no:warnings }

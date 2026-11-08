@@ -12,6 +12,27 @@ from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 MIN_BCRYPT_ROUNDS = 12
+LOCAL_DB_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def uses_tls(uri: str) -> bool:
+    """True if a MongoDB connection string is encrypted, or only reaches this machine.
+    mongodb+srv:// (Atlas) turns TLS on by default; plain mongodb:// needs tls=true."""
+    if uri.startswith("mongodb+srv://"):
+        return "tls=false" not in uri.lower() and "ssl=false" not in uri.lower()
+    rest = uri.removeprefix("mongodb://")
+    hosts_part, _, query = rest.partition("?")
+    hosts_part = hosts_part.split("/", 1)[0].rsplit("@", 1)[-1]
+    hosts = set()
+    for host in hosts_part.split(","):
+        if host.startswith("["):  # [::1]:27017
+            hosts.add(host[1:].split("]", 1)[0])
+        else:
+            hosts.add(host.split(":", 1)[0])
+    if hosts <= LOCAL_DB_HOSTS:
+        return True
+    params = query.lower().replace("&", ";").split(";")
+    return "tls=true" in params or "ssl=true" in params
 
 
 class Settings(BaseSettings):
@@ -25,6 +46,10 @@ class Settings(BaseSettings):
     mongodb_db: str = Field(default="netmap", pattern=r"^[A-Za-z0-9_-]{1,63}$")
     mongodb_timeout_ms: int = Field(default=5000, ge=100, le=30000)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # Phase 9: how many reverse proxies sit in front of the app and append to X-Forwarded-For
+    # (security/client_ip.py). 0 = no proxy: use the connecting address. Render: 2 (Cloudflare
+    # and Render's own proxy).
+    trusted_proxy_hops: int = Field(default=0, ge=0, le=5)
 
     # First admin, created only when the users collection is empty (CLAUDE.md 7.1).
     admin_username: str | None = Field(default=None, pattern=r"^[a-z0-9._-]{3,32}$")
@@ -112,6 +137,25 @@ class Settings(BaseSettings):
                 raise ValueError("LLM_BASE_URL must be an https:// URL (or http://localhost)")
         if self.llm_provider in ("gemini", "groq") and self.llm_api_key is None:
             raise ValueError(f"LLM_PROVIDER={self.llm_provider} needs LLM_API_KEY")
+        return self
+
+    @model_validator(mode="after")
+    def check_production(self) -> "Settings":
+        # Phase 9: mistakes that would otherwise only show up as a half-working deployment.
+        if self.env != "production":
+            return self
+        if "mongodb_uri" not in self.model_fields_set:
+            raise ValueError("MONGODB_URI must be set in production (the Atlas connection "
+                             "string); the localhost default is for development only")
+        for name in ("mongodb_uri", "ai_mongodb_uri"):
+            value = getattr(self, name)
+            if value is not None and not uses_tls(value.get_secret_value()):
+                raise ValueError(f"{name.upper()} must use TLS in production: use the "
+                                 "mongodb+srv:// string from Atlas, or add tls=true")
+        if self.frontend_dist is not None and not (self.frontend_dist / "index.html").is_file():
+            # A failed or skipped `npm run build` must fail the deploy, not quietly serve an
+            # API without its dashboard.
+            raise ValueError(f"No frontend build at {self.frontend_dist}: run npm run build")
         return self
 
     @property

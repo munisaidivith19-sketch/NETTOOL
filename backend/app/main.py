@@ -30,6 +30,7 @@ from app.api import (
     mfa,
     notifications,
     predictions,
+    request_info,
     subnets,
     topology,
     users,
@@ -49,7 +50,7 @@ API_ROUTERS = (
     auth.router, mfa.router, users.router, agents.router, audit.router, agent_ingest.router,
     subnets.router, ips.router, alerts.router, devices.router, dashboard.router,
     topology.router, notifications.router, configs.router, changes.router,
-    agent_config.router, agent_ai.router, ai.router, predictions.router,
+    agent_config.router, agent_ai.router, ai.router, predictions.router, request_info.router,
 )
 
 

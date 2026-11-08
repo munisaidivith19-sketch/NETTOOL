@@ -357,6 +357,25 @@ for admins (QR drawn as SVG squares, recovery codes shown once), *Two-step* acco
 MFA column and *Reset MFA* on Admin → Users, a low-recovery-codes banner, and the *Security*
 alert type.
 
+## Added in Phase 9: deployment
+```
+ GitHub (public) ──push──► Render Blueprint (render.yaml): one free web service, Singapore
+   build:  pip install backend/requirements.txt → npm ci → vite build (frontend/dist)
+   start:  uvicorn --no-proxy-headers --no-server-header, ENV=production
+ client ─► Cloudflare ─► Render proxy (10.x) ─► app: X-Forwarded-For "<forged…>, client, cf"
+                                                    client_ip = 2nd entry from the right
+ app ── mongodb+srv:// (TLS) ──► Atlas M0 Singapore: netmap_app (readWrite), netmap_ai_ro (read)
+```
+
+| Part | Where | What |
+|---|---|---|
+| Blueprint | `render.yaml` | one free service, `buildFilter`, secrets as `sync: false` |
+| Client IP | `security/client_ip.py`, `services/audit.py` | `TRUSTED_PROXY_HOPS`, counted from the right, peer must be private |
+| Diagnostics | `api/request_info.py` | `GET /api/admin/request-info` (admin) |
+| Production checks | `config.py` | `MONGODB_URI` must be set and use TLS; the frontend build must exist |
+| SPA fallback | `frontend.py` | `/docs`, `/redoc`, `/openapi.json` stay 404 |
+| Release checks | `scripts/scan_git_history.py`, `scripts/check_render_yaml.py`, `security-check.ps1 -Release` | secrets in history, secrets in render.yaml |
+
 ## MongoDB indexes
 | Collection | Index | Why |
 |---|---|---|

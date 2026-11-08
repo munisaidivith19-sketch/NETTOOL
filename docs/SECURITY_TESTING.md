@@ -244,10 +244,32 @@ DevTools → Network → click any request → Response headers. Look for:
 ```
 The frame stays empty, and the console reports that framing was refused.
 
-## 9. Automated checks
+## 9. Forged client IP (on the deployed site)
+
+**Claim:** behind Render's proxy, a client can't choose the IP address that the rate limit
+and the audit log see. If it could, an attacker would send a new fake `X-Forwarded-For`
+with each guess and never hit the per-IP limit.
+
+1. Sign in on `https://<service>.onrender.com` as an admin, and open
+   `/api/admin/request-info`. `client_ip` is your real address and `chosen_by` is
+   `forwarded`.
+2. In the console, send a forged header:
+   ```js
+   await api("GET", "/api/admin/request-info", undefined, { "X-Forwarded-For": "1.2.3.4" });
+   ```
+   **Expected:** `forwarded_for` now starts with `1.2.3.4`, because Render keeps it. But
+   `client_ip` is still your real address: NetMap takes the second entry from the right, the
+   one Cloudflare adds, and the client can't change it.
+3. Optional: sign in with a wrong password 11 times, each time with a different forged
+   header. The 11th answer is still `429`.
+
+Locally (`TRUSTED_PROXY_HOPS=0`), the header is ignored completely. The automated version is
+`backend/tests/test_client_ip.py`.
+
+## 10. Automated checks
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\security-check.ps1
+powershell -ExecutionPolicy Bypass -File scripts\security-check.ps1          # add -Release before a deploy
 ```
 This runs:
 - ruff, Bandit and pip-audit on the backend and the agent
@@ -266,4 +288,5 @@ The security tests most worth showing:
 | `backend/tests/test_agents.py` | signature, replay, tampering, clock window |
 | `backend/tests/test_input_limits.py` | NoSQL payloads on every write route; size limits everywhere |
 | `backend/tests/test_security_events.py` | audit flooding bounded, security alerts |
+| `backend/tests/test_client_ip.py` | forged `X-Forwarded-For` ignored; per-IP limit holds behind the proxy |
 | `agent/tests/test_logging_secrets.py` | passwords and community strings never logged |
