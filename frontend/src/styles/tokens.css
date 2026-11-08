@@ -1,80 +1,161 @@
 /*
  * NetMap design tokens. Components use these variables only, never raw hex values.
- * Concept: a patch panel. Calm, cool neutrals, so the status colours are the only loud thing.
- * Every text colour below passes WCAG 4.5:1 contrast on both --surface and --panel.
+ *
+ * Look: frosted-glass cards over a soft violet wash, pill buttons, generous radii.
+ * The status colours (up / down / warn) stay the loudest thing on screen; the violet accent is
+ * for navigation, focus and charts. Every text colour below passes WCAG 4.5:1 on --panel,
+ * --surface and the glass fills (which are at least 68% opaque over a pale background).
  */
 :root {
   color-scheme: light;
 
-  --surface: #f3f5f6;
+  --surface: #eef0f7;
   --panel: #ffffff;
-  --panel-sunken: #e9edf0;
-  --ink: #1a232d;
-  --muted: #5a6672;
-  --line: #d3dae0;
-  --accent: #1d5db8; /* Cat6 patch-cable blue */
+  --panel-sunken: #f2f3f9;
+  --ink: #171a2b;
+  --muted: #555b70;
+  --line: #dde0eb;
+  --accent: #6240d9; /* violet: links, active nav, focus, charts */
   --on-accent: #ffffff;
+  --accent-soft: color-mix(in srgb, var(--accent) 11%, transparent);
+  --accent-2: #e8742a; /* chart companion colour (decorative only, never text) */
 
-  --up: #1b7f47;
-  --down: #c02626;
-  --warn: #93600f;
-  --scrim: rgb(13 19 24 / 0.55); /* behind dialogs */
+  /* The dark pill primary button from the reference; inverted in dark mode. */
+  --primary: #171a2b;
+  --on-primary: #ffffff;
+
+  --up: #157a45;
+  --down: #c42323;
+  --warn: #8f5b0a;
+  --info: #3d4fb8;
+  --scrim: rgb(17 18 38 / 0.45); /* behind dialogs */
+
+  /* Glass: translucent fill + blur + a bright hairline edge. */
+  --glass-fill: rgb(255 255 255 / 0.7);
+  --glass-fill-strong: rgb(255 255 255 / 0.86);
+  --glass-edge: rgb(255 255 255 / 0.75);
+  --glass-blur: 18px;
+  /* What components use. The themes only change the *-fill values, so the fallbacks at the
+     end of this file can replace these two with one plain :root rule. */
+  --glass: var(--glass-fill);
+  --glass-strong: var(--glass-fill-strong);
+  --wash-1: rgb(124 92 255 / 0.22);
+  --wash-2: rgb(56 189 248 / 0.16);
+  --wash-3: rgb(244 114 182 / 0.14);
+
+  --shadow-sm: 0 1px 2px rgb(23 26 43 / 0.06), 0 1px 1px rgb(23 26 43 / 0.04);
+  --shadow-md: 0 1px 2px rgb(23 26 43 / 0.05), 0 10px 30px -12px rgb(49 38 120 / 0.22);
+  --shadow-lg: 0 2px 4px rgb(23 26 43 / 0.06), 0 22px 48px -18px rgb(49 38 120 / 0.34);
 
   --font-ui: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
   --font-addr: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", monospace;
 
   /* Type scale: minor third (1.2), 16px base */
+  --text-xs: 0.75rem;
   --text-sm: 0.833rem;
   --text-base: 1rem;
   --text-md: 1.2rem;
   --text-lg: 1.44rem;
   --text-xl: 1.728rem;
+  --text-2xl: 2.2rem;
 
-  /* Dense dashboard spacing, 4px grid */
+  /* 4px grid */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
 
-  --radius-sm: 3px; /* controls */
-  --radius-md: 6px; /* panels */
+  --radius-sm: 10px; /* controls */
+  --radius-md: 18px; /* cards */
+  --radius-pill: 999px;
 
-  --sidebar-width: 232px;
-  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent);
+  /* Motion: quick, eased, and switched off by prefers-reduced-motion (base.css). */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 140ms;
+  --dur: 220ms;
+
+  --sidebar-width: 256px;
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --surface: #11181f;
-    --panel: #17212a;
-    --panel-sunken: #0d1318;
-    --ink: #e2e8ee;
-    --muted: #9aa7b3;
-    --line: #2a3742;
-    --accent: #74a6ee;
-    --on-accent: #11181f;
+    --surface: #0d0f1e;
+    --panel: #171a2e;
+    --panel-sunken: #12142a;
+    --ink: #e9eaf6;
+    --muted: #a3a7c2;
+    --line: #2b2f4e;
+    --accent: #a78bfa;
+    --on-accent: #120f24;
+    --accent-2: #fb9a55;
+    --primary: #ece8ff;
+    --on-primary: #151329;
     --up: #4cc38a;
-    --down: #f07068;
+    --down: #f47a72;
     --warn: #e3b04f;
-    --scrim: rgb(0 0 0 / 0.65);
+    --info: #93a4ff;
+    --scrim: rgb(0 0 0 / 0.6);
+    --glass-fill: rgb(25 28 50 / 0.66);
+    --glass-fill-strong: rgb(25 28 50 / 0.86);
+    --glass-edge: rgb(255 255 255 / 0.08);
+    --wash-1: rgb(124 92 255 / 0.24);
+    --wash-2: rgb(14 165 233 / 0.12);
+    --wash-3: rgb(236 72 153 / 0.1);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+    --shadow-lg: 0 2px 4px rgb(0 0 0 / 0.4), 0 24px 52px -16px rgb(0 0 0 / 0.7);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --surface: #11181f;
-  --panel: #17212a;
-  --panel-sunken: #0d1318;
-  --ink: #e2e8ee;
-  --muted: #9aa7b3;
-  --line: #2a3742;
-  --accent: #74a6ee;
-  --on-accent: #11181f;
+  --surface: #0d0f1e;
+  --panel: #171a2e;
+  --panel-sunken: #12142a;
+  --ink: #e9eaf6;
+  --muted: #a3a7c2;
+  --line: #2b2f4e;
+  --accent: #a78bfa;
+  --on-accent: #120f24;
+  --accent-2: #fb9a55;
+  --primary: #ece8ff;
+  --on-primary: #151329;
   --up: #4cc38a;
-  --down: #f07068;
+  --down: #f47a72;
   --warn: #e3b04f;
-  --scrim: rgb(0 0 0 / 0.65);
+  --info: #93a4ff;
+  --scrim: rgb(0 0 0 / 0.6);
+  --glass-fill: rgb(25 28 50 / 0.66);
+  --glass-fill-strong: rgb(25 28 50 / 0.86);
+  --glass-edge: rgb(255 255 255 / 0.08);
+  --wash-1: rgb(124 92 255 / 0.24);
+  --wash-2: rgb(14 165 233 / 0.12);
+  --wash-3: rgb(236 72 153 / 0.1);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px -12px rgb(0 0 0 / 0.6);
+  --shadow-lg: 0 2px 4px rgb(0 0 0 / 0.4), 0 24px 52px -16px rgb(0 0 0 / 0.7);
+}
+
+/*
+ * Glass falls back to solid panels where blur isn't supported, and for people who ask the
+ * system for less transparency.
+ */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --glass: var(--panel);
+    --glass-strong: var(--panel);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass: var(--panel);
+    --glass-strong: var(--panel);
+    --glass-blur: 0px;
+  }
 }

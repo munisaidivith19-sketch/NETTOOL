@@ -11,6 +11,7 @@ import "./styles/base.css";
 import "./styles/layout.css";
 import "./styles/components.css";
 import "./styles/pages.css";
+import "./styles/dashboard.css";
 
 import App from "./App.jsx";
 import { AuthProvider } from "./auth/AuthProvider.jsx";

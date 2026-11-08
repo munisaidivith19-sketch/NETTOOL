@@ -41,10 +41,13 @@ export function Field({ label, hint, error, children, className = "" }) {
   );
 }
 
-export function PageHead({ title, children }) {
+export function PageHead({ title, description, children }) {
   return (
     <div className="page-head">
-      <h1>{title}</h1>
+      <div className="page-head-text">
+        <h1>{title}</h1>
+        {description && <p className="page-description">{description}</p>}
+      </div>
       {children && <div className="page-actions">{children}</div>}
     </div>
   );

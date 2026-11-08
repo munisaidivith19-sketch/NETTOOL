@@ -405,7 +405,15 @@ alert type.
 | audit_log | `at`, `(action, at)`, `(actor.username, at)` | fast newest-first and filtered reads |
 
 ## Frontend design notes
-- Concept: a patch panel. Cool neutral surfaces, so status colours are the only loud thing.
+- Look (redesign, 2026-11-08): frosted-glass cards (`backdrop-filter`) over a soft violet
+  colour wash, pill buttons, 18px card radius, a grouped sidebar with live count badges, and a
+  breadcrumb top bar with an "Ask NetMap" search pill (press `/`). Status colours stay the loudest
+  thing on screen; the violet accent is for navigation, focus and charts.
+- Glass falls back to solid cards when the browser can't blur, and for users who ask the OS
+  for reduced transparency. Every hover/press transition is switched off under
+  `prefers-reduced-motion`.
+- Dashboard charts are plain SVG coloured by CSS classes (no `style=""` attributes, no chart
+  library), each with a text alternative, so the CSP's `style-src 'self'` holds.
 - Status is shown by **shape and colour** (up = filled circle, down = hollow square,
   warning = triangle), so it never depends on colour alone.
 - Fonts are bundled (Atkinson Hyperlegible Next for the UI, JetBrains Mono for addresses only)
