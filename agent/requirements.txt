@@ -14,7 +14,7 @@ ciscoconfparse2==0.9.18
 # Python 3.10 on Windows. Imported only inside the AI job, never during discovery.
 scikit-learn==1.7.2
 prophet==1.5.0
-cmdstanpy==1.3.0
+cmdstanpy==1.3.2
 numpy==2.2.6
 pandas==2.3.3
 scipy==1.15.3
