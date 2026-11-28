@@ -100,6 +100,11 @@ If someone loses the phone and the codes, another admin uses **Reset MFA** in Ad
 If the only admin is locked out, someone with server access runs
 `python scripts/reset_mfa.py <username>` in `backend` (it uses `MONGODB_URI` from `.env`).
 
+**Forgotten password.** Another admin uses **Reset password** in Admin → Users. If the only
+admin forgot theirs, run `python scripts/reset_password.py <username>` in `backend`. It prints
+a random temporary password once, signs the user out, clears the lockout and forces a new
+password at the next sign-in.
+
 Main API routes:
 - `/api/auth/login`, `/logout`, `/me`, `/change-password`
 - `/api/auth/mfa` (status), `/mfa/verify` (the code step of sign-in), `/mfa/setup`,
