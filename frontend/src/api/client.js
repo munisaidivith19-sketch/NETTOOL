@@ -54,6 +54,10 @@ export function errorMessage(status, body) {
   if (detail && typeof detail === "object" && !Array.isArray(detail) && typeof detail.message === "string") {
     return detail.message;
   }
+  // The password policy sends {"detail": {"field": "password", "problems": ["...", ...]}}.
+  if (detail && typeof detail === "object" && Array.isArray(detail.problems) && detail.problems.length > 0) {
+    return detail.problems.map(String).join(" ");
+  }
   if (Array.isArray(detail) && detail.length > 0) {
     return detail
       .map((err) => {

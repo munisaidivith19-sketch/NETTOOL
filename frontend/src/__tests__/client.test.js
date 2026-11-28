@@ -97,6 +97,17 @@ describe("errorMessage", () => {
     );
   });
 
+  it("lists every password-policy problem", () => {
+    expect(
+      errorMessage(422, {
+        detail: {
+          field: "password",
+          problems: ["Use at least 12 characters.", "Don't include your username in the password."],
+        },
+      }),
+    ).toBe("Use at least 12 characters. Don't include your username in the password.");
+  });
+
   it("never shows raw server internals", () => {
     expect(errorMessage(500, null)).toBe("The server had a problem. Try again in a moment.");
     expect(errorMessage(429, null)).toMatch(/Too many attempts/);
