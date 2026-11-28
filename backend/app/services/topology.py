@@ -36,10 +36,34 @@ def _label(device: dict | None) -> str | None:
     return device.get("sys_name") or device.get("mgmt_ip")
 
 
+# The map draws a different icon per role. It is a guess from sysDescr (and the AI
+# classifier for access points), only used for the picture; switch words are checked before
+# router words because many switches run a "router" OS (MikroTik CRS runs RouterOS).
+_AP_WORDS = re.compile(r"access point|arubaos|aironet|unifi|wireless", re.IGNORECASE)
+_SWITCH_WORDS = re.compile(
+    r"switch|catalyst|cat9k|\bc[239]\d{3}|\bcrs\d|procurve|nexus|\bex\d{4}", re.IGNORECASE)
+_ROUTER_WORDS = re.compile(
+    r"router|\bisr\b|\basr\b|\biosv\b|vios|\bchr\b|junos|frrouting|vyos", re.IGNORECASE)
+
+
+def device_role(device: dict) -> str:
+    """'router' | 'switch' | 'ap' | 'device' (unknown)."""
+    descr = str(device.get("sys_descr") or "")[:512]
+    guessed = (device.get("classification") or {}).get("type")
+    if guessed == "access_point" or _AP_WORDS.search(descr):
+        return "ap"
+    if _SWITCH_WORDS.search(descr):
+        return "switch"
+    if _ROUTER_WORDS.search(descr):
+        return "router"
+    return "device"
+
+
 async def build_graph(db: AsyncDatabase) -> dict:
     devices = {d["_id"]: d async for d in db.devices.find(
         {}, {"sys_name": 1, "mgmt_ip": 1, "vendor": 1, "status": 1, "sys_location": 1,
-             "snmp_v2c": 1}).limit(MAX_NODES)}
+             "snmp_v2c": 1, "sys_descr": 1, "classification.type": 1,
+             "unconfigured.flag": 1}).limit(MAX_NODES)}
     links = [link async for link in db.links.find({}).limit(MAX_LINKS)]
 
     alerts: dict[str, int] = {}
@@ -66,7 +90,8 @@ async def build_graph(db: AsyncDatabase) -> dict:
         "vendor": d.get("vendor"), "location": d.get("sys_location"),
         "status": NODE_STATUS.get(d.get("status"), "warning"), "device_status": d.get("status"),
         "external": False, "open_alerts": alerts.get(str(device_id), 0),
-        "snmp_v2c": bool(d.get("snmp_v2c")),
+        "snmp_v2c": bool(d.get("snmp_v2c")), "role": device_role(d),
+        "unconfigured": bool((d.get("unconfigured") or {}).get("flag")),
     } for device_id, d in devices.items()]
 
     external: dict[str, dict] = {}
@@ -85,6 +110,7 @@ async def build_graph(db: AsyncDatabase) -> dict:
                 "vendor": None, "location": None, "status": "external",
                 "device_status": None, "external": True, "open_alerts": 0,
                 "platform": link.get("remote_platform"), "snmp_v2c": False,
+                "role": "external", "unconfigured": False,
             })
             remote = (ext_id, None)
         _merge_edge(edges, link, local, remote, interfaces)

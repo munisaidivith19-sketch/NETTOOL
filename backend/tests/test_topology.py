@@ -5,6 +5,7 @@ from datetime import timedelta
 import pytest
 
 from app.services.links import short_name
+from app.services.topology import device_role
 from tests.ipam_helpers import as_role, seed_report, send
 from tests.test_ingest import report
 from tests.topology_helpers import PC, PC2, access, core, utc_now, with_counters
@@ -58,6 +59,35 @@ def test_unmatched_neighbour_and_self_reference(client, sync_db):
              {"protocol": "lldp", "if_index": 2, "remote_mgmt_ip": "10.10.99.11"}]  # itself
     seed_report(client, sync_db, access(links=False) | {"links": links})
     assert all(link["remote_device_id"] is None for link in sync_db.links.find())
+
+
+@pytest.mark.parametrize(("descr", "classification", "role"), [
+    ("Cisco IOS Software, IOSv Software (VIOS-ADVENTERPRISEK9-M), Version 15.9(3)M", None,
+     "router"),
+    ("Cisco IOS Software [Cupertino], Catalyst L3 Switch Software (CAT9K_IOSXE)", None, "switch"),
+    ("HP J9774A 2530-8G-PoEP Switch, revision YA.16.10.0019", None, "switch"),
+    ("RouterOS CRS326-24G-2S+ 7.14", None, "switch"),    # a switch running a router OS
+    ("RouterOS CHR 7.14", None, "router"),
+    ("Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M)", None, "switch"),
+    ("ArubaOS (MODEL: 515), Version 8.10.0.10", None, "ap"),
+    ("Linux box", "access_point", "ap"),                  # the AI classifier's answer counts
+    ("Linux box", None, "device"),
+    (None, None, "device"),
+])
+def test_device_role(descr, classification, role):
+    device = {"sys_descr": descr, "classification": {"type": classification}}
+    assert device_role(device) == role
+
+
+def test_graph_nodes_carry_role_and_unconfigured_flag(client, sync_db):
+    seed_report(client, sync_db, core(), access())
+    sync_db.devices.update_one({"sys_name": "ACCESS-SW-1"}, {"$set": {"unconfigured.flag": True}})
+    nodes = {n["label"]: n for n in graph(client, sync_db)["nodes"]}
+    assert nodes["isp-pe-01.example.net"]["role"] == "external"
+    assert nodes["ACCESS-SW-1"]["unconfigured"] is True
+    assert nodes["CORE-SW-1"]["unconfigured"] is False
+    roles = {"router", "switch", "ap", "device", "external"}
+    assert all(n["role"] in roles for n in nodes.values())
 
 
 def test_short_name():

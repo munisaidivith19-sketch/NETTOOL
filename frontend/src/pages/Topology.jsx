@@ -4,6 +4,7 @@ import { topology as topologyApi } from "../api/api.js";
 import StatusMark from "../components/StatusMark.jsx";
 import { REFRESH_MS } from "../components/SummaryProvider.jsx";
 import TopologyCanvas from "../components/TopologyCanvas.jsx";
+import { ROLE_LABEL, ROLES, RoleIcon } from "../components/topologyIcons.jsx";
 import { Badge, Empty, ErrorNote, Field, Loading, PageHead, Panel } from "../components/ui.jsx";
 import { DEVICE_STATUS, formatDateTime, timeAgo } from "../format.js";
 import { useResource } from "../hooks/useResource.js";
@@ -26,25 +27,38 @@ function NodeStatus({ node }) {
   return <StatusMark status={s.mark} label={s.label} />;
 }
 
+/* The legend uses its own class names: the chart legend's ".legend" styles draw a line. */
 function Legend() {
   return (
-    <ul className="legend" aria-label="Map legend">
-      <li>
-        <StatusMark status="up" label="Up" />
-      </li>
-      <li>
-        <StatusMark status="down" label="Down" />
-      </li>
-      <li>
-        <StatusMark status="warning" label="SNMP error" />
-      </li>
-      <li>
-        <span className="legend-external" aria-hidden="true" /> Neighbour not managed by NetMap
-      </li>
-      <li>
-        <span className="legend-line legend-line-down" aria-hidden="true" /> Link down or lost
-      </li>
-    </ul>
+    <div className="topology-legend" aria-label="Map legend" role="group">
+      <ul aria-label="Device types">
+        {ROLES.map((role) => (
+          <li key={role}>
+            <span className={`topo-chip topo-chip-${role === "external" ? "external" : "type"}`}>
+              <RoleIcon role={role} size={14} />
+            </span>
+            {ROLE_LABEL[role]}
+          </li>
+        ))}
+      </ul>
+      <ul aria-label="Status">
+        <li>
+          <span className="topo-chip topo-chip-up" aria-hidden="true" /> Up
+        </li>
+        <li>
+          <span className="topo-chip topo-chip-warning" aria-hidden="true" /> SNMP error
+        </li>
+        <li>
+          <span className="topo-chip topo-chip-down" aria-hidden="true" /> Down
+        </li>
+        <li>
+          <span className="topo-link" aria-hidden="true" /> Link up
+        </li>
+        <li>
+          <span className="topo-link topo-link-down" aria-hidden="true" /> Link down or lost
+        </li>
+      </ul>
+    </div>
   );
 }
 
@@ -60,6 +74,14 @@ function NodePanel({ node, edges, byId }) {
   return (
     <Panel title={node.label} className="topology-side">
       <dl className="facts facts-compact">
+        <div>
+          <dt>Type</dt>
+          <dd className="topo-type">
+            <RoleIcon role={node.role ?? (node.external ? "external" : "device")} size={16} />
+            {ROLE_LABEL[node.role] ?? (node.external ? ROLE_LABEL.external : ROLE_LABEL.device)}
+            {node.unconfigured && <Badge tone="warn">needs setup</Badge>}
+          </dd>
+        </div>
         <div>
           <dt>Status</dt>
           <dd>
@@ -248,6 +270,9 @@ export default function Topology() {
                 }}
                 label={`Network map with ${managed} devices and ${edges.length} links. The same information is in the Connections table below.`}
               />
+              <p className="muted topology-hint">
+                Hover a device to trace its links, click it for details. Scroll to zoom, drag to move.
+              </p>
               <Legend />
             </Panel>
             <NodePanel node={byId.get(selectedId)} edges={edges} byId={byId} />

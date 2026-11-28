@@ -4,7 +4,8 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import App from "../App.jsx";
 import { AuthProvider } from "../auth/AuthProvider.jsx";
-import { toElements } from "../components/TopologyCanvas.jsx";
+import cytoscape from "cytoscape";
+import { ISOLATED_GROUP, toElements, treePositions } from "../components/TopologyCanvas.jsx";
 import { formatBps } from "../format.js";
 import { mockApi, signedIn } from "./fakeApi.js";
 
@@ -143,6 +144,54 @@ describe("topology page", () => {
     expect(elements.filter((e) => e.group === "nodes")).toHaveLength(3);
     expect(elements.find((e) => e.data.id === "e1").data).toMatchObject({ source: CORE, target: ACCESS, status: "down" });
     expect(elements.find((e) => e.data.id.startsWith("ext:")).data.label).toBe(EVIL);
+  });
+
+  it("captions repeat the status in words and loose devices get their own box", () => {
+    const graph = {
+      ...GRAPH,
+      nodes: [
+        ...GRAPH.nodes,
+        { id: "f".repeat(24), label: "Switch", mgmt_ip: "10.10.99.50", status: "warning", external: false,
+          role: "switch", unconfigured: true },
+      ],
+    };
+    const elements = toElements(graph);
+    const byId = new Map(elements.map((e) => [e.data.id, e.data]));
+    expect(byId.get(ACCESS).caption).toBe("ACCESS-SW-1\n10.10.99.11\nDOWN");
+    expect(byId.get(CORE).caption).toBe("CORE-SW-1\n10.10.99.1");
+    expect(byId.get(CORE).role).toBe("device"); // no role from the API: generic icon
+    expect(byId.get("ext:00:00:0c:ee:00:01")).toMatchObject({ role: "external", caption: `${EVIL}\nJuniper MX` });
+    expect(byId.get("f".repeat(24))).toMatchObject({
+      parent: ISOLATED_GROUP,
+      caption: "Switch\n10.10.99.50\nSNMP ERROR · NEEDS SETUP",
+    });
+    expect(byId.get(ISOLATED_GROUP).role).toBe("group");
+    expect(byId.get(CORE).parent).toBeUndefined();
+  });
+
+  it("lays the network out as a tree from the ISP down, loose devices below", () => {
+    const node = (id, role) => ({ id, label: id, role, status: role === "external" ? "external" : "up",
+      external: role === "external" });
+    const link = (a, b) => ({ id: `${a}-${b}`, source: a, target: b, status: "up" });
+    const graph = {
+      nodes: [node("isp", "external"), node("edge", "router"), node("core", "switch"), node("acc1", "switch"),
+        node("acc2", "switch"), node("ap", "ap"), node("spare", "switch")],
+      edges: [link("edge", "isp"), link("core", "edge"), link("core", "acc1"), link("core", "acc2"),
+        link("core", "ap"), link("acc1", "acc2")],
+      truncated: false,
+    };
+    const cy = cytoscape({ headless: true, elements: toElements(graph) });
+    const p = treePositions(cy);
+    expect(p.isp.y).toBeLessThan(p.edge.y);
+    expect(p.edge.y).toBeLessThan(p.core.y);
+    expect(p.acc1.y).toBe(p.ap.y); // acc1-acc2 is a redundant link, not another tier
+    expect(p.acc2.y).toBe(p.acc1.y);
+    expect(p.core.y).toBeLessThan(p.acc1.y);
+    expect(p.core.x).toBeCloseTo((p.acc1.x + p.ap.x) / 2); // centred over its children
+    // No neighbours: in the box to the right of the map, level with the lowest tier.
+    expect(p.spare.x).toBeGreaterThan(Math.max(p.acc1.x, p.acc2.x, p.ap.x));
+    expect(p.spare.y).toBe(p.ap.y);
+    cy.destroy();
   });
 });
 

@@ -783,12 +783,73 @@
   align-items: start;
 }
 
+.topology-stage {
+  position: relative;
+}
+
+/* No frosted glass behind the map: a backdrop-filter puts the canvas on a composited layer,
+   which Chrome on Windows can draw slightly soft at 125%/150% display scaling. */
+.panel.topology-map {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: var(--panel);
+}
+
 .topology-canvas {
   position: relative; /* Cytoscape needs it; see the note in index.html */
-  height: 520px;
+  height: 620px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
+  /* A faint dot grid, like drawing paper, so the map reads as a canvas. */
+  background-color: var(--panel-sunken);
+  background-image: radial-gradient(circle, var(--line) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+
+.topology-controls {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+}
+
+.topology-controls button {
+  min-width: 32px;
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.topology-controls button:hover {
   background: var(--panel-sunken);
+}
+
+.topology-controls button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.topology-controls button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.topology-hint {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
 }
 
 .facts-compact {
@@ -796,37 +857,85 @@
   gap: var(--space-2);
 }
 
-.legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
-  margin: var(--space-3) 0 0;
-  padding: 0;
-  list-style: none;
+.topology-legend {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
   font-size: var(--text-sm);
 }
 
-.legend li {
+.topology-legend ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.topology-legend li {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
 }
 
-.legend-external {
-  width: 14px;
-  height: 12px;
-  border: 2px dashed var(--muted);
-  border-radius: var(--radius-sm);
-}
-
-.legend-line {
+.topo-chip {
+  display: inline-grid;
+  place-items: center;
   width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+}
+
+.topo-chip-type {
+  background: var(--panel-sunken);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.topo-chip-external {
+  border: 2px dashed var(--muted);
+  color: var(--muted);
+}
+
+.topo-chip-up {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--up);
+}
+
+.topo-chip-warning {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.topo-chip-down {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 3px solid var(--down);
+}
+
+.topo-link {
+  width: 24px;
   border-top: 3px solid var(--muted);
 }
 
-.legend-line-down {
+.topo-link-down {
   border-top-style: dashed;
   border-top-color: var(--down);
+}
+
+.topo-type {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .locate-result {
@@ -857,7 +966,7 @@
   }
 
   .topology-canvas {
-    height: 380px;
+    height: 440px;
   }
 }
 
