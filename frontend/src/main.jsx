@@ -12,6 +12,7 @@ import "./styles/layout.css";
 import "./styles/components.css";
 import "./styles/pages.css";
 import "./styles/dashboard.css";
+import "./styles/liquid.css";
 
 import App from "./App.jsx";
 import { AuthProvider } from "./auth/AuthProvider.jsx";

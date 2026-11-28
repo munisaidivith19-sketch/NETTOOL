@@ -1,0 +1,421 @@
+/*
+ * Liquid glass layer. Loaded last; it refines the existing frosted look:
+ *   - deeper, more translucent glass with a light "rim" around every card (like the edge of a
+ *     glass pane catching light) and a soft sheen from the top-left corner,
+ *   - larger, smoother radii; the sidebar and top bar float as glass slabs on wide screens,
+ *   - glossy pill buttons and inputs with a gentle spring on hover and press,
+ *   - a richer colour wash behind the glass, so the blur has something to refract.
+ *
+ * Safety nets (unchanged rules from base.css / tokens.css still apply):
+ *   - prefers-reduced-motion: every transition and animation is cut to ~0 ms;
+ *   - prefers-reduced-transparency or no backdrop-filter support: solid panels, no sheen;
+ *   - text colours keep >= 4.5:1: the glass fills stay at least 58% opaque over a pale
+ *     (light) or dark (dark) background, the same range the token contrast checks used;
+ *   - the topology map stays on an opaque panel (pages.css) so its canvas is drawn sharp.
+ * Pure CSS: no images, no inline styles, nothing the CSP would block.
+ */
+
+:root {
+  --radius-sm: 14px; /* controls */
+  --radius-md: 26px; /* cards */
+  --radius-lg: 32px; /* floating sidebar, top bar, dialogs */
+
+  --glass-fill: rgb(255 255 255 / 0.6);
+  --glass-fill-strong: rgb(255 255 255 / 0.8);
+  --glass-edge: rgb(255 255 255 / 0.85);
+  --glass-blur: 26px;
+  --glass-saturate: 180%;
+  /* Light catching the top-left of a pane, fading out by the middle. */
+  --glass-sheen: linear-gradient(155deg, rgb(255 255 255 / 0.55) 0%, rgb(255 255 255 / 0.12) 34%, rgb(255 255 255 / 0) 58%);
+  /* The rim: bright on the lit edges, almost invisible on the far ones. */
+  --rim-hi: rgb(255 255 255 / 0.95);
+  --rim-mid: rgb(255 255 255 / 0.2);
+  --rim-lo: rgb(255 255 255 / 0.55);
+  /* Specular highlight on the top edge + a faint inner glow at the bottom. */
+  --glass-spec: inset 0 1px 0 rgb(255 255 255 / 0.9), inset 0 -1px 0 rgb(255 255 255 / 0.3);
+  --button-gloss: linear-gradient(180deg, rgb(255 255 255 / 0.22) 0%, rgb(255 255 255 / 0.04) 52%, rgb(255 255 255 / 0) 100%);
+
+  --wash-1: rgb(124 92 255 / 0.3);
+  --wash-2: rgb(56 189 248 / 0.24);
+  --wash-3: rgb(244 114 182 / 0.2);
+  --wash-4: rgb(251 191 36 / 0.12);
+
+  --shadow-md: 0 1px 2px rgb(23 26 43 / 0.05), 0 14px 36px -14px rgb(49 38 120 / 0.28);
+  --shadow-lg: 0 2px 4px rgb(23 26 43 / 0.06), 0 26px 56px -20px rgb(49 38 120 / 0.4);
+  --glow-accent: 0 10px 26px -10px color-mix(in srgb, var(--accent) 70%, transparent);
+
+  /* A slight overshoot, like a drop of liquid settling. Kept short so it never feels slow. */
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --dur-slow: 380ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --glass-fill: rgb(30 33 60 / 0.58);
+    --glass-fill-strong: rgb(32 35 64 / 0.8);
+    --glass-edge: rgb(255 255 255 / 0.1);
+    --glass-sheen: linear-gradient(155deg, rgb(255 255 255 / 0.1) 0%, rgb(255 255 255 / 0.03) 34%, rgb(255 255 255 / 0) 58%);
+    --rim-hi: rgb(255 255 255 / 0.28);
+    --rim-mid: rgb(255 255 255 / 0.04);
+    --rim-lo: rgb(255 255 255 / 0.12);
+    --glass-spec: inset 0 1px 0 rgb(255 255 255 / 0.12), inset 0 -1px 0 rgb(255 255 255 / 0.04);
+    --button-gloss: linear-gradient(180deg, rgb(255 255 255 / 0.35) 0%, rgb(255 255 255 / 0.06) 52%, rgb(255 255 255 / 0) 100%);
+    --wash-1: rgb(124 92 255 / 0.3);
+    --wash-2: rgb(14 165 233 / 0.16);
+    --wash-3: rgb(236 72 153 / 0.14);
+    --wash-4: rgb(251 191 36 / 0.05);
+  }
+}
+
+:root[data-theme="dark"] {
+  --glass-fill: rgb(30 33 60 / 0.58);
+  --glass-fill-strong: rgb(32 35 64 / 0.8);
+  --glass-edge: rgb(255 255 255 / 0.1);
+  --glass-sheen: linear-gradient(155deg, rgb(255 255 255 / 0.1) 0%, rgb(255 255 255 / 0.03) 34%, rgb(255 255 255 / 0) 58%);
+  --rim-hi: rgb(255 255 255 / 0.28);
+  --rim-mid: rgb(255 255 255 / 0.04);
+  --rim-lo: rgb(255 255 255 / 0.12);
+  --glass-spec: inset 0 1px 0 rgb(255 255 255 / 0.12), inset 0 -1px 0 rgb(255 255 255 / 0.04);
+  --button-gloss: linear-gradient(180deg, rgb(255 255 255 / 0.35) 0%, rgb(255 255 255 / 0.06) 52%, rgb(255 255 255 / 0) 100%);
+  --wash-1: rgb(124 92 255 / 0.3);
+  --wash-2: rgb(14 165 233 / 0.16);
+  --wash-3: rgb(236 72 153 / 0.14);
+  --wash-4: rgb(251 191 36 / 0.05);
+}
+
+/* No blur support, or the user asked for less transparency: solid panels, no sheen or rim. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --glass-sheen: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-sheen: none;
+    --rim-hi: transparent;
+    --rim-mid: transparent;
+    --rim-lo: transparent;
+  }
+}
+
+/* ---- Background: four soft colour pools for the glass to refract ---------------------- */
+body::before {
+  background:
+    radial-gradient(46rem 36rem at 8% -8%, var(--wash-1), transparent 70%),
+    radial-gradient(40rem 32rem at 98% 4%, var(--wash-2), transparent 70%),
+    radial-gradient(44rem 36rem at 72% 110%, var(--wash-3), transparent 70%),
+    radial-gradient(30rem 26rem at 30% 70%, var(--wash-4), transparent 70%),
+    var(--surface);
+}
+
+/* ---- Glass surfaces ------------------------------------------------------------------ */
+.sidebar,
+.topbar,
+.panel,
+.tile,
+.widget,
+.health,
+.alert-card,
+.dialog,
+.auth-card {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+.panel,
+.tile,
+.widget,
+.health,
+.alert-card,
+.auth-card {
+  position: relative;
+  isolation: isolate;
+  background: var(--glass-sheen), var(--glass);
+  box-shadow: var(--glass-spec), var(--shadow-md);
+}
+/* (Border colours are left alone: an alert card's coloured left edge shows its severity.) */
+
+/* The rim: a 1px gradient ring cut out with a mask, so only the edge shows. */
+.panel::before,
+.tile::before,
+.widget::before,
+.health::before,
+.alert-card::before,
+.auth-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(150deg, var(--rim-hi) 0%, var(--rim-mid) 38%, var(--rim-mid) 62%, var(--rim-lo) 100%);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  pointer-events: none;
+}
+
+.auth-card {
+  border-radius: var(--radius-lg);
+  background: var(--glass-sheen), var(--glass-strong);
+  box-shadow: var(--glass-spec), var(--shadow-lg);
+}
+
+.dialog {
+  border-radius: var(--radius-lg);
+  background: var(--glass-sheen), var(--glass-strong);
+  box-shadow: var(--glass-spec), var(--shadow-lg);
+}
+
+/* Cards that are links or live widgets lift a little, with a soft spring. */
+.widget,
+.tile {
+  transition:
+    transform var(--dur-slow) var(--ease-spring),
+    box-shadow var(--dur-slow) var(--ease);
+}
+
+.widget:hover,
+.tile-link:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--glass-spec), var(--shadow-lg);
+}
+
+.tile-link:hover {
+  box-shadow: var(--glass-spec), var(--shadow-lg), inset 0 0 0 1px var(--accent);
+}
+
+/* The map keeps an opaque panel (see pages.css): only the rim and radius change. */
+.panel.topology-map {
+  background: var(--panel);
+}
+
+/* ---- Floating sidebar and top bar (wide screens only; phones keep the stacked header) -- */
+@media (min-width: 761px) {
+  .sidebar {
+    top: 12px;
+    height: calc(100vh - 24px);
+    margin: 12px 0 12px 12px;
+    background: var(--glass-sheen), var(--glass);
+    border: 1px solid var(--glass-edge);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--glass-spec), var(--shadow-md);
+  }
+
+  .topbar {
+    top: 12px;
+    margin: 12px 20px 0;
+    padding-inline: var(--space-5);
+    background: var(--glass-sheen), var(--glass);
+    border: 1px solid var(--glass-edge);
+    border-radius: var(--radius-pill);
+    box-shadow: var(--glass-spec), var(--shadow-md);
+  }
+}
+
+/* ---- Navigation: liquid pills ---------------------------------------------------------- */
+.nav-link,
+.account-link {
+  border-radius: var(--radius-pill);
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur-fast) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    transform var(--dur) var(--ease-spring);
+}
+
+.nav-link:hover {
+  transform: translateX(2px);
+}
+
+.nav-link:active {
+  transform: scale(0.97);
+}
+
+.nav-link[aria-current="page"] {
+  background: var(--glass-sheen), var(--glass-strong);
+  box-shadow:
+    var(--glass-spec),
+    var(--shadow-sm),
+    inset 0 0 0 1px var(--line),
+    0 8px 22px -14px color-mix(in srgb, var(--accent) 80%, transparent);
+}
+
+.profile-card {
+  border-radius: var(--radius-md);
+}
+
+/* ---- Buttons: glossy pills with a spring -------------------------------------------- */
+.button,
+.theme-toggle,
+.alert-counter {
+  min-height: 44px; /* touch target */
+  border-radius: var(--radius-pill);
+  transition:
+    background-color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur-fast) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    transform var(--dur-slow) var(--ease-spring);
+}
+
+.button {
+  background-image: var(--button-gloss);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    0 1px 2px rgb(0 0 0 / 0.12),
+    0 8px 20px -10px color-mix(in srgb, var(--primary) 70%, transparent);
+}
+
+.button:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    0 1px 2px rgb(0 0 0 / 0.12),
+    var(--glow-accent);
+}
+
+.button:active,
+.theme-toggle:active,
+.alert-counter:active {
+  transform: translateY(0) scale(0.97);
+  transition-duration: var(--dur-fast);
+}
+
+.button:focus-visible,
+.theme-toggle:focus-visible,
+.alert-counter:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Secondary, ghost and danger buttons, the theme toggle and the alert counter: clear glass. */
+.button-secondary,
+.button-danger,
+.theme-toggle,
+.alert-counter {
+  background-image: var(--glass-sheen);
+  box-shadow: var(--glass-spec), var(--shadow-sm);
+}
+
+.button-secondary:hover,
+.button-danger:hover,
+.theme-toggle:hover,
+.alert-counter:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--glass-spec), var(--shadow-md);
+}
+
+.button-ghost,
+.button-ghost:hover {
+  background-image: none;
+  box-shadow: none;
+}
+
+.button-small {
+  min-height: 36px; /* compact table actions; the row itself is the larger target */
+}
+
+.button:disabled,
+.button:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* ---- Inputs: soft wells ---------------------------------------------------------------- */
+.field input,
+.field select,
+.field textarea,
+.range-row input {
+  min-height: 44px;
+  border-radius: var(--radius-sm);
+  background: var(--glass-strong);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.06);
+  transition:
+    border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    background-color var(--dur) var(--ease);
+}
+
+.field input:hover,
+.field select:hover,
+.field textarea:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+
+.field input:focus-visible,
+.field select:focus-visible,
+.field textarea:focus-visible,
+.range-row input:focus-visible,
+.topbar-ask input:focus-visible {
+  background: var(--panel);
+  box-shadow: var(--focus-ring), 0 6px 18px -10px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.topbar-ask input {
+  min-height: 44px;
+  background: var(--glass-sheen), var(--glass-strong);
+  box-shadow: var(--glass-spec);
+}
+
+/* ---- Smaller pieces ------------------------------------------------------------------- */
+.badge {
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.35);
+}
+
+.notice,
+.segmented {
+  border-radius: var(--radius-md);
+}
+
+.table-wrap {
+  border-radius: var(--radius-sm);
+}
+
+.table tbody tr {
+  transition: background-color var(--dur) var(--ease);
+}
+
+.topology-controls {
+  border-radius: var(--radius-pill);
+  background: var(--glass-sheen), var(--glass-strong);
+  box-shadow: var(--glass-spec), var(--shadow-sm);
+}
+
+.topology-controls button {
+  border-radius: var(--radius-pill);
+  transition: background-color var(--dur) var(--ease), transform var(--dur) var(--ease-spring);
+}
+
+.topology-controls button:active {
+  transform: scale(0.94);
+}
+
+/* ---- Page entrance: content settles in when you open a page ----------------------------- */
+.main > * {
+  animation: liquid-rise var(--dur-slow) var(--ease) both;
+}
+
+.main > *:nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.main > *:nth-child(3) {
+  animation-delay: 80ms;
+}
+
+.main > *:nth-child(n + 4) {
+  animation-delay: 120ms;
+}
+
+@keyframes liquid-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
